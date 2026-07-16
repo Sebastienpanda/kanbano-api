@@ -1,0 +1,1 @@
+ALTER TABLE public.workspaces DROP COLUMN description;

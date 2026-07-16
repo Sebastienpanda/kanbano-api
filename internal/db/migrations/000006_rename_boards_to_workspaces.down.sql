@@ -1,0 +1,1 @@
+ALTER TABLE workspaces RENAME TO boards;
