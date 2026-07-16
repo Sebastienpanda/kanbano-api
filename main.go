@@ -18,11 +18,7 @@ import (
 
 func main() {
 
-	err := godotenv.Load()
-
-	if err != nil {
-		log.Fatal("Connexion DB échouée:", err)
-	}
+	_ = godotenv.Load()
 
 	pool, err := pgxpool.New(context.Background(), os.Getenv("DATABASE_URL"))
 	if err != nil {
