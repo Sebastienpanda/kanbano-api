@@ -38,7 +38,7 @@ func main() {
 	r.Use(middleware.Logger)
 	r.Use(middleware.Recoverer)
 	r.Use(cors.Handler(cors.Options{
-		AllowedOrigins: []string{"http://localhost:4200"},
+		AllowedOrigins: []string{"http://localhost:4200", "https://kanban.kanbano.fr"},
 		AllowedMethods: []string{"GET", "POST", "PATCH"},
 		AllowedHeaders: []string{"Accept", "Authorization", "Content-Type"},
 	}))
