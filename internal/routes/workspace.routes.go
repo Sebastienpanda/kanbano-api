@@ -13,6 +13,8 @@ func WorkspacesRoutes(r chi.Router, wh *handler.WorkspaceHandler, ch *handler.Co
 
 		r.Get("/", wh.List)
 		r.Get("/recent", wh.Recent)
+		r.Get("/names", wh.Names)
+		r.Get("/columns/names", ch.NamesByWorkspaceTitle)
 		r.Post("/", wh.Create)
 
 		r.Route("/{id}", func(r chi.Router) {

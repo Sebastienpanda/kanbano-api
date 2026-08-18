@@ -6,6 +6,12 @@ import (
 	"github.com/google/uuid"
 )
 
+type ColumnName struct {
+	ID          uuid.UUID `json:"id"`
+	WorkspaceID uuid.UUID `json:"workspace_id"`
+	Title       string    `json:"title"`
+}
+
 type Column struct {
 	ID          uuid.UUID `json:"id"`
 	Title       string    `json:"title"`

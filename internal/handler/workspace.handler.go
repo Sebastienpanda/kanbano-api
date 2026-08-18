@@ -43,6 +43,18 @@ func (h *WorkspaceHandler) Recent(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusOK, workspaces)
 }
 
+func (h *WorkspaceHandler) Names(w http.ResponseWriter, r *http.Request) {
+	userID := userIDFromContext(r)
+
+	names, err := h.repo.ListNames(r.Context(), userID)
+	if err != nil {
+		http.Error(w, "erreur serveur", http.StatusInternalServerError)
+		return
+	}
+
+	writeJSON(w, http.StatusOK, names)
+}
+
 func (h *WorkspaceHandler) Create(w http.ResponseWriter, r *http.Request) {
 	userID := userIDFromContext(r)
 

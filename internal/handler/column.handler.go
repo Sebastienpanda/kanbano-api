@@ -20,6 +20,34 @@ func NewColumnHandler(repo *repository.ColumnRepository, workspaceRepo *reposito
 	return &ColumnHandler{repo: repo, workspaceRepo: workspaceRepo}
 }
 
+func (h *ColumnHandler) NamesByWorkspaceTitle(w http.ResponseWriter, r *http.Request) {
+	userID := userIDFromContext(r)
+
+	title := r.URL.Query().Get("title")
+	if title == "" {
+		http.Error(w, "paramètre title manquant", http.StatusBadRequest)
+		return
+	}
+
+	workspaceID, err := h.workspaceRepo.GetIDByTitle(r.Context(), title, userID)
+	if err != nil {
+		if errors.Is(err, pgx.ErrNoRows) {
+			http.Error(w, "workspace introuvable", http.StatusNotFound)
+			return
+		}
+		http.Error(w, "erreur serveur", http.StatusInternalServerError)
+		return
+	}
+
+	names, err := h.repo.ListNames(r.Context(), workspaceID)
+	if err != nil {
+		http.Error(w, "erreur serveur", http.StatusInternalServerError)
+		return
+	}
+
+	writeJSON(w, http.StatusOK, names)
+}
+
 func (h *ColumnHandler) Create(w http.ResponseWriter, r *http.Request) {
 	userID := userIDFromContext(r)
 

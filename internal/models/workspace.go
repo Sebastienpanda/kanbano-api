@@ -15,6 +15,11 @@ type Workspace struct {
 	UpdatedAt   *time.Time `json:"updated_at"`
 }
 
+type WorkspaceName struct {
+	ID    uuid.UUID `json:"id"`
+	Title string    `json:"title"`
+}
+
 type WorkspaceDetail struct {
 	Workspace
 	Columns []ColumnWithTasks `json:"columns"`
