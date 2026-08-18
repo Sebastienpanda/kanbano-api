@@ -29,16 +29,17 @@ func (r *TaskRepository) Create(ctx context.Context, title string, description *
 	return pgx.CollectOneRow(rows, pgx.RowToStructByName[models.Task])
 }
 
-func (r *TaskRepository) Update(ctx context.Context, id uuid.UUID, columnID uuid.UUID, title *string, description *string, position *int) (models.Task, error) {
+func (r *TaskRepository) Update(ctx context.Context, id uuid.UUID, columnID uuid.UUID, title *string, description *string, position *int, newColumnID *uuid.UUID) (models.Task, error) {
 	rows, err := r.db.Query(ctx, `
 		UPDATE tasks
 		SET title       = COALESCE($1, title),
 		    description = COALESCE($2, description),
 		    position    = COALESCE($3, position),
+		    column_id   = COALESCE($4, column_id),
 		    updated_at  = NOW()
-		WHERE id = $4 AND column_id = $5
+		WHERE id = $5 AND column_id = $6
 		RETURNING *
-	`, title, description, position, id, columnID)
+	`, title, description, position, newColumnID, id, columnID)
 	if err != nil {
 		return models.Task{}, err
 	}

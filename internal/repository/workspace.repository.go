@@ -38,6 +38,24 @@ func (r *WorkspaceRepository) ListRecent(ctx context.Context, userID uuid.UUID) 
 	return pgx.CollectRows(rows, pgx.RowToStructByName[models.Workspace])
 }
 
+func (r *WorkspaceRepository) ListNames(ctx context.Context, userID uuid.UUID) ([]models.WorkspaceName, error) {
+	rows, err := r.db.Query(ctx,
+		"SELECT id, title FROM workspaces WHERE user_id = $1 ORDER BY created_at DESC",
+		userID)
+	if err != nil {
+		return nil, err
+	}
+	return pgx.CollectRows(rows, pgx.RowToStructByName[models.WorkspaceName])
+}
+
+func (r *WorkspaceRepository) GetIDByTitle(ctx context.Context, title string, userID uuid.UUID) (uuid.UUID, error) {
+	var id uuid.UUID
+	err := r.db.QueryRow(ctx,
+		"SELECT id FROM workspaces WHERE title = $1 AND user_id = $2 ORDER BY created_at DESC LIMIT 1",
+		title, userID).Scan(&id)
+	return id, err
+}
+
 func (r *WorkspaceRepository) Create(ctx context.Context, title string, description *string, userID uuid.UUID) (models.Workspace, error) {
 	rows, err := r.db.Query(ctx,
 		"INSERT INTO workspaces (title, description, user_id) VALUES ($1, $2, $3) RETURNING *",

@@ -29,6 +29,24 @@ func (r *ColumnRepository) Create(ctx context.Context, title string, workspaceID
 	return pgx.CollectOneRow(rows, pgx.RowToStructByName[models.Column])
 }
 
+func (r *ColumnRepository) ListNames(ctx context.Context, workspaceID uuid.UUID) ([]models.ColumnName, error) {
+	rows, err := r.db.Query(ctx,
+		"SELECT id, workspace_id, title FROM columns WHERE workspace_id = $1 ORDER BY position ASC",
+		workspaceID)
+	if err != nil {
+		return nil, err
+	}
+	return pgx.CollectRows(rows, pgx.RowToStructByName[models.ColumnName])
+}
+
+func (r *ColumnRepository) Exists(ctx context.Context, id uuid.UUID, workspaceID uuid.UUID) (bool, error) {
+	var exists bool
+	err := r.db.QueryRow(ctx,
+		"SELECT EXISTS(SELECT 1 FROM columns WHERE id = $1 AND workspace_id = $2)",
+		id, workspaceID).Scan(&exists)
+	return exists, err
+}
+
 func (r *ColumnRepository) Update(ctx context.Context, id uuid.UUID, workspaceID uuid.UUID, title *string, position *int) (models.Column, error) {
 	rows, err := r.db.Query(ctx, `
 		UPDATE columns

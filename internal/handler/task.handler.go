@@ -14,10 +14,11 @@ import (
 type TaskHandler struct {
 	repo          *repository.TaskRepository
 	workspaceRepo *repository.WorkspaceRepository
+	columnRepo    *repository.ColumnRepository
 }
 
-func NewTaskHandler(repo *repository.TaskRepository, workspaceRepo *repository.WorkspaceRepository) *TaskHandler {
-	return &TaskHandler{repo: repo, workspaceRepo: workspaceRepo}
+func NewTaskHandler(repo *repository.TaskRepository, workspaceRepo *repository.WorkspaceRepository, columnRepo *repository.ColumnRepository) *TaskHandler {
+	return &TaskHandler{repo: repo, workspaceRepo: workspaceRepo, columnRepo: columnRepo}
 }
 
 func (h *TaskHandler) parseTaskContext(w http.ResponseWriter, r *http.Request) (userID, workspaceID, columnID uuid.UUID, ok bool) {
@@ -70,7 +71,7 @@ func (h *TaskHandler) Create(w http.ResponseWriter, r *http.Request) {
 }
 
 func (h *TaskHandler) Update(w http.ResponseWriter, r *http.Request) {
-	_, _, columnID, ok := h.parseTaskContext(w, r)
+	userID, _, columnID, ok := h.parseTaskContext(w, r)
 	if !ok {
 		return
 	}
@@ -82,16 +83,45 @@ func (h *TaskHandler) Update(w http.ResponseWriter, r *http.Request) {
 	}
 
 	var body struct {
-		Title       *string `json:"title"`
-		Description *string `json:"description"`
-		Position    *int    `json:"position"`
+		Title          *string    `json:"title"`
+		Description    *string    `json:"description"`
+		Position       *int       `json:"position"`
+		WorkspaceID    *uuid.UUID `json:"workspaceId"`
+		TargetColumnID *uuid.UUID `json:"targetColumnId"`
 	}
 	if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
 		http.Error(w, "body invalide", http.StatusBadRequest)
 		return
 	}
 
-	task, err := h.repo.Update(r.Context(), taskID, columnID, body.Title, body.Description, body.Position)
+	if (body.WorkspaceID == nil) != (body.TargetColumnID == nil) {
+		http.Error(w, "workspaceId et targetColumnId doivent être fournis ensemble", http.StatusBadRequest)
+		return
+	}
+
+	if body.WorkspaceID != nil {
+		wsExists, err := h.workspaceRepo.Exists(r.Context(), *body.WorkspaceID, userID)
+		if err != nil {
+			http.Error(w, "erreur serveur", http.StatusInternalServerError)
+			return
+		}
+		if !wsExists {
+			http.Error(w, "workspace cible introuvable", http.StatusNotFound)
+			return
+		}
+
+		colExists, err := h.columnRepo.Exists(r.Context(), *body.TargetColumnID, *body.WorkspaceID)
+		if err != nil {
+			http.Error(w, "erreur serveur", http.StatusInternalServerError)
+			return
+		}
+		if !colExists {
+			http.Error(w, "colonne cible introuvable dans ce workspace", http.StatusNotFound)
+			return
+		}
+	}
+
+	task, err := h.repo.Update(r.Context(), taskID, columnID, body.Title, body.Description, body.Position, body.TargetColumnID)
 	if err != nil {
 		if errors.Is(err, pgx.ErrNoRows) {
 			http.Error(w, "tâche introuvable", http.StatusNotFound)
