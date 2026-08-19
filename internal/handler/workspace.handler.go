@@ -59,15 +59,15 @@ func (h *WorkspaceHandler) Create(w http.ResponseWriter, r *http.Request) {
 	userID := userIDFromContext(r)
 
 	var body struct {
-		Title       string  `json:"title"`
+		Name        string  `json:"name"`
 		Description *string `json:"description"`
 	}
-	if err := json.NewDecoder(r.Body).Decode(&body); err != nil || body.Title == "" {
+	if err := json.NewDecoder(r.Body).Decode(&body); err != nil || body.Name == "" {
 		http.Error(w, "body invalide", http.StatusBadRequest)
 		return
 	}
 
-	workspace, err := h.repo.Create(r.Context(), body.Title, body.Description, userID)
+	workspace, err := h.repo.Create(r.Context(), body.Name, body.Description, userID)
 	if err != nil {
 		http.Error(w, "erreur serveur", http.StatusInternalServerError)
 		return
@@ -108,7 +108,7 @@ func (h *WorkspaceHandler) Update(w http.ResponseWriter, r *http.Request) {
 	}
 
 	var body struct {
-		Title       *string `json:"title"`
+		Name        *string `json:"name"`
 		Description *string `json:"description"`
 	}
 	if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
@@ -116,7 +116,7 @@ func (h *WorkspaceHandler) Update(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	workspace, err := h.repo.Update(r.Context(), workspaceID, userID, body.Title, body.Description)
+	workspace, err := h.repo.Update(r.Context(), workspaceID, userID, body.Name, body.Description)
 	if err != nil {
 		if errors.Is(err, pgx.ErrNoRows) {
 			http.Error(w, "workspace introuvable", http.StatusNotFound)

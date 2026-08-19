@@ -17,12 +17,12 @@ func NewColumnRepository(db *pgxpool.Pool) *ColumnRepository {
 	return &ColumnRepository{db: db}
 }
 
-func (r *ColumnRepository) Create(ctx context.Context, title string, workspaceID uuid.UUID) (models.Column, error) {
+func (r *ColumnRepository) Create(ctx context.Context, name string, workspaceID uuid.UUID) (models.Column, error) {
 	rows, err := r.db.Query(ctx, `
-		INSERT INTO columns (title, workspace_id, position)
+		INSERT INTO columns (name, workspace_id, position)
 		VALUES ($1, $2, (SELECT COALESCE(MAX(position) + 1, 0) FROM columns WHERE workspace_id = $2))
 		RETURNING *
-	`, title, workspaceID)
+	`, name, workspaceID)
 	if err != nil {
 		return models.Column{}, err
 	}
@@ -31,7 +31,7 @@ func (r *ColumnRepository) Create(ctx context.Context, title string, workspaceID
 
 func (r *ColumnRepository) ListNames(ctx context.Context, workspaceID uuid.UUID) ([]models.ColumnName, error) {
 	rows, err := r.db.Query(ctx,
-		"SELECT id, workspace_id, title FROM columns WHERE workspace_id = $1 ORDER BY position ASC",
+		"SELECT id, workspace_id, name FROM columns WHERE workspace_id = $1 ORDER BY position ASC",
 		workspaceID)
 	if err != nil {
 		return nil, err
@@ -47,15 +47,15 @@ func (r *ColumnRepository) Exists(ctx context.Context, id uuid.UUID, workspaceID
 	return exists, err
 }
 
-func (r *ColumnRepository) Update(ctx context.Context, id uuid.UUID, workspaceID uuid.UUID, title *string, position *int) (models.Column, error) {
+func (r *ColumnRepository) Update(ctx context.Context, id uuid.UUID, workspaceID uuid.UUID, name *string, position *int) (models.Column, error) {
 	rows, err := r.db.Query(ctx, `
 		UPDATE columns
-		SET title    = COALESCE($1, title),
+		SET name     = COALESCE($1, name),
 		    position = COALESCE($2, position),
 		    updated_at = NOW()
 		WHERE id = $3 AND workspace_id = $4
 		RETURNING *
-	`, title, position, id, workspaceID)
+	`, name, position, id, workspaceID)
 	if err != nil {
 		return models.Column{}, err
 	}

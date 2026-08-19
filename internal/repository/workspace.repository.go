@@ -20,7 +20,7 @@ func NewWorkspaceRepository(db *pgxpool.Pool) *WorkspaceRepository {
 
 func (r *WorkspaceRepository) List(ctx context.Context, userID uuid.UUID) ([]models.Workspace, error) {
 	rows, err := r.db.Query(ctx,
-		"SELECT id, title, description, user_id, created_at, updated_at FROM workspaces WHERE user_id = $1 ORDER BY created_at DESC",
+		"SELECT id, name, description, user_id, created_at, updated_at FROM workspaces WHERE user_id = $1 ORDER BY created_at DESC",
 		userID)
 	if err != nil {
 		return nil, err
@@ -30,7 +30,7 @@ func (r *WorkspaceRepository) List(ctx context.Context, userID uuid.UUID) ([]mod
 
 func (r *WorkspaceRepository) ListRecent(ctx context.Context, userID uuid.UUID) ([]models.Workspace, error) {
 	rows, err := r.db.Query(ctx,
-		"SELECT id, title, description, user_id, created_at, updated_at FROM workspaces WHERE user_id = $1 ORDER BY created_at DESC LIMIT 6",
+		"SELECT id, name, description, user_id, created_at, updated_at FROM workspaces WHERE user_id = $1 ORDER BY created_at DESC LIMIT 6",
 		userID)
 	if err != nil {
 		return nil, err
@@ -40,7 +40,7 @@ func (r *WorkspaceRepository) ListRecent(ctx context.Context, userID uuid.UUID) 
 
 func (r *WorkspaceRepository) ListNames(ctx context.Context, userID uuid.UUID) ([]models.WorkspaceName, error) {
 	rows, err := r.db.Query(ctx,
-		"SELECT id, title FROM workspaces WHERE user_id = $1 ORDER BY created_at DESC",
+		"SELECT id, name FROM workspaces WHERE user_id = $1 ORDER BY created_at DESC",
 		userID)
 	if err != nil {
 		return nil, err
@@ -48,18 +48,18 @@ func (r *WorkspaceRepository) ListNames(ctx context.Context, userID uuid.UUID) (
 	return pgx.CollectRows(rows, pgx.RowToStructByName[models.WorkspaceName])
 }
 
-func (r *WorkspaceRepository) GetIDByTitle(ctx context.Context, title string, userID uuid.UUID) (uuid.UUID, error) {
+func (r *WorkspaceRepository) GetIDByName(ctx context.Context, name string, userID uuid.UUID) (uuid.UUID, error) {
 	var id uuid.UUID
 	err := r.db.QueryRow(ctx,
-		"SELECT id FROM workspaces WHERE title = $1 AND user_id = $2 ORDER BY created_at DESC LIMIT 1",
-		title, userID).Scan(&id)
+		"SELECT id FROM workspaces WHERE name = $1 AND user_id = $2 ORDER BY created_at DESC LIMIT 1",
+		name, userID).Scan(&id)
 	return id, err
 }
 
-func (r *WorkspaceRepository) Create(ctx context.Context, title string, description *string, userID uuid.UUID) (models.Workspace, error) {
+func (r *WorkspaceRepository) Create(ctx context.Context, name string, description *string, userID uuid.UUID) (models.Workspace, error) {
 	rows, err := r.db.Query(ctx,
-		"INSERT INTO workspaces (title, description, user_id) VALUES ($1, $2, $3) RETURNING *",
-		title, description, userID)
+		"INSERT INTO workspaces (name, description, user_id) VALUES ($1, $2, $3) RETURNING *",
+		name, description, userID)
 	if err != nil {
 		return models.Workspace{}, err
 	}
@@ -69,9 +69,9 @@ func (r *WorkspaceRepository) Create(ctx context.Context, title string, descript
 func (r *WorkspaceRepository) GetByID(ctx context.Context, id uuid.UUID, userID uuid.UUID) (models.WorkspaceDetail, error) {
 	rows, err := r.db.Query(ctx, `
 		SELECT
-			w.id, w.title, w.description, w.user_id, w.created_at, w.updated_at,
-			c.id, c.title, c.position, c.workspace_id, c.created_at, c.updated_at,
-			t.id, t.title, t.description, t.position, t.column_id, t.created_at, t.updated_at
+			w.id, w.name, w.description, w.user_id, w.created_at, w.updated_at,
+			c.id, c.name, c.position, c.workspace_id, c.created_at, c.updated_at,
+			t.id, t.name, t.description, t.position, t.column_id, t.created_at, t.updated_at
 		FROM workspaces w
 		LEFT JOIN columns c ON c.workspace_id = w.id
 		LEFT JOIN tasks t ON t.column_id = c.id
@@ -91,25 +91,25 @@ func (r *WorkspaceRepository) GetByID(ctx context.Context, id uuid.UUID, userID 
 	for rows.Next() {
 		var (
 			wsID, wsUserID             uuid.UUID
-			wsTitle                    string
+			wsName                     string
 			wsDesc                     *string
 			wsCreatedAt                time.Time
 			wsUpdatedAt                *time.Time
 			colID, colWsID             *uuid.UUID
-			colTitle                   *string
+			colName                    *string
 			colPos                     *int
 			colCreatedAt, colUpdatedAt *time.Time
 			taskID, taskColID          *uuid.UUID
-			taskTitle                  *string
+			taskName                   *string
 			taskDesc                   *string
 			taskPos                    *int
 			taskCreatedAt, taskUpdAt   *time.Time
 		)
 
 		if err := rows.Scan(
-			&wsID, &wsTitle, &wsDesc, &wsUserID, &wsCreatedAt, &wsUpdatedAt,
-			&colID, &colTitle, &colPos, &colWsID, &colCreatedAt, &colUpdatedAt,
-			&taskID, &taskTitle, &taskDesc, &taskPos, &taskColID, &taskCreatedAt, &taskUpdAt,
+			&wsID, &wsName, &wsDesc, &wsUserID, &wsCreatedAt, &wsUpdatedAt,
+			&colID, &colName, &colPos, &colWsID, &colCreatedAt, &colUpdatedAt,
+			&taskID, &taskName, &taskDesc, &taskPos, &taskColID, &taskCreatedAt, &taskUpdAt,
 		); err != nil {
 			return models.WorkspaceDetail{}, err
 		}
@@ -117,7 +117,7 @@ func (r *WorkspaceRepository) GetByID(ctx context.Context, id uuid.UUID, userID 
 		if !initialized {
 			detail.Workspace = models.Workspace{
 				ID:          wsID,
-				Title:       wsTitle,
+				Name:        wsName,
 				Description: wsDesc,
 				UserID:      wsUserID,
 				CreatedAt:   wsCreatedAt,
@@ -134,7 +134,7 @@ func (r *WorkspaceRepository) GetByID(ctx context.Context, id uuid.UUID, userID 
 			col := models.ColumnWithTasks{
 				Column: models.Column{
 					ID:          *colID,
-					Title:       derefStr(colTitle),
+					Name:        derefStr(colName),
 					Position:    derefInt(colPos),
 					WorkspaceID: derefUUID(colWsID),
 					CreatedAt:   derefTime(colCreatedAt),
@@ -149,7 +149,7 @@ func (r *WorkspaceRepository) GetByID(ctx context.Context, id uuid.UUID, userID 
 		if taskID != nil {
 			task := models.Task{
 				ID:          *taskID,
-				Title:       derefStr(taskTitle),
+				Name:        derefStr(taskName),
 				Description: taskDesc,
 				Position:    derefInt(taskPos),
 				ColumnID:    derefUUID(taskColID),
@@ -175,15 +175,15 @@ func (r *WorkspaceRepository) GetByID(ctx context.Context, id uuid.UUID, userID 
 	return detail, nil
 }
 
-func (r *WorkspaceRepository) Update(ctx context.Context, id uuid.UUID, userID uuid.UUID, title *string, description *string) (models.Workspace, error) {
+func (r *WorkspaceRepository) Update(ctx context.Context, id uuid.UUID, userID uuid.UUID, name *string, description *string) (models.Workspace, error) {
 	rows, err := r.db.Query(ctx, `
 		UPDATE workspaces
-		SET title       = COALESCE($1, title),
+		SET name        = COALESCE($1, name),
 		    description = COALESCE($2, description),
 		    updated_at  = NOW()
 		WHERE id = $3 AND user_id = $4
 		RETURNING *
-	`, title, description, id, userID)
+	`, name, description, id, userID)
 	if err != nil {
 		return models.Workspace{}, err
 	}

@@ -9,12 +9,12 @@ import (
 type ColumnName struct {
 	ID          uuid.UUID `json:"id"`
 	WorkspaceID uuid.UUID `json:"workspace_id"`
-	Title       string    `json:"title"`
+	Name        string    `json:"name"`
 }
 
 type Column struct {
 	ID          uuid.UUID `json:"id"`
-	Title       string    `json:"title"`
+	Name        string    `json:"name"`
 	Position    int       `json:"position"`
 	WorkspaceID uuid.UUID `json:"workspace_id"`
 	CreatedAt   time.Time `json:"created_at"`
