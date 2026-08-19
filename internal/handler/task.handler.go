@@ -53,15 +53,15 @@ func (h *TaskHandler) Create(w http.ResponseWriter, r *http.Request) {
 	}
 
 	var body struct {
-		Title       string  `json:"title"`
+		Name        string  `json:"name"`
 		Description *string `json:"description"`
 	}
-	if err := json.NewDecoder(r.Body).Decode(&body); err != nil || body.Title == "" {
+	if err := json.NewDecoder(r.Body).Decode(&body); err != nil || body.Name == "" {
 		http.Error(w, "body invalide", http.StatusBadRequest)
 		return
 	}
 
-	task, err := h.repo.Create(r.Context(), body.Title, body.Description, columnID)
+	task, err := h.repo.Create(r.Context(), body.Name, body.Description, columnID)
 	if err != nil {
 		http.Error(w, "erreur serveur", http.StatusInternalServerError)
 		return
@@ -83,7 +83,7 @@ func (h *TaskHandler) Update(w http.ResponseWriter, r *http.Request) {
 	}
 
 	var body struct {
-		Title          *string    `json:"title"`
+		Name           *string    `json:"name"`
 		Description    *string    `json:"description"`
 		Position       *int       `json:"position"`
 		WorkspaceID    *uuid.UUID `json:"workspaceId"`
@@ -121,7 +121,7 @@ func (h *TaskHandler) Update(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 
-	task, err := h.repo.Update(r.Context(), taskID, columnID, body.Title, body.Description, body.Position, body.TargetColumnID)
+	task, err := h.repo.Update(r.Context(), taskID, columnID, body.Name, body.Description, body.Position, body.TargetColumnID)
 	if err != nil {
 		if errors.Is(err, pgx.ErrNoRows) {
 			http.Error(w, "tâche introuvable", http.StatusNotFound)

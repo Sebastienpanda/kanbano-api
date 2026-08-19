@@ -20,16 +20,16 @@ func NewColumnHandler(repo *repository.ColumnRepository, workspaceRepo *reposito
 	return &ColumnHandler{repo: repo, workspaceRepo: workspaceRepo}
 }
 
-func (h *ColumnHandler) NamesByWorkspaceTitle(w http.ResponseWriter, r *http.Request) {
+func (h *ColumnHandler) NamesByWorkspaceName(w http.ResponseWriter, r *http.Request) {
 	userID := userIDFromContext(r)
 
-	title := r.URL.Query().Get("title")
-	if title == "" {
-		http.Error(w, "paramètre title manquant", http.StatusBadRequest)
+	name := r.URL.Query().Get("name")
+	if name == "" {
+		http.Error(w, "paramètre name manquant", http.StatusBadRequest)
 		return
 	}
 
-	workspaceID, err := h.workspaceRepo.GetIDByTitle(r.Context(), title, userID)
+	workspaceID, err := h.workspaceRepo.GetIDByName(r.Context(), name, userID)
 	if err != nil {
 		if errors.Is(err, pgx.ErrNoRows) {
 			http.Error(w, "workspace introuvable", http.StatusNotFound)
@@ -64,14 +64,14 @@ func (h *ColumnHandler) Create(w http.ResponseWriter, r *http.Request) {
 	}
 
 	var body struct {
-		Title string `json:"title"`
+		Name string `json:"name"`
 	}
-	if err := json.NewDecoder(r.Body).Decode(&body); err != nil || body.Title == "" {
+	if err := json.NewDecoder(r.Body).Decode(&body); err != nil || body.Name == "" {
 		http.Error(w, "body invalide", http.StatusBadRequest)
 		return
 	}
 
-	column, err := h.repo.Create(r.Context(), body.Title, workspaceID)
+	column, err := h.repo.Create(r.Context(), body.Name, workspaceID)
 	if err != nil {
 		http.Error(w, "erreur serveur", http.StatusInternalServerError)
 		return
@@ -102,7 +102,7 @@ func (h *ColumnHandler) Update(w http.ResponseWriter, r *http.Request) {
 	}
 
 	var body struct {
-		Title    *string `json:"title"`
+		Name     *string `json:"name"`
 		Position *int    `json:"position"`
 	}
 	if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
@@ -110,7 +110,7 @@ func (h *ColumnHandler) Update(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	column, err := h.repo.Update(r.Context(), columnID, workspaceID, body.Title, body.Position)
+	column, err := h.repo.Update(r.Context(), columnID, workspaceID, body.Name, body.Position)
 	if err != nil {
 		if errors.Is(err, pgx.ErrNoRows) {
 			http.Error(w, "colonne introuvable", http.StatusNotFound)

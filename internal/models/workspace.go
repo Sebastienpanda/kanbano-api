@@ -8,7 +8,7 @@ import (
 
 type Workspace struct {
 	ID          uuid.UUID  `json:"id"`
-	Title       string     `json:"title"`
+	Name        string     `json:"name"`
 	Description *string    `json:"description"`
 	UserID      uuid.UUID  `json:"user_id"`
 	CreatedAt   time.Time  `json:"created_at"`
@@ -16,8 +16,8 @@ type Workspace struct {
 }
 
 type WorkspaceName struct {
-	ID    uuid.UUID `json:"id"`
-	Title string    `json:"title"`
+	ID   uuid.UUID `json:"id"`
+	Name string    `json:"name"`
 }
 
 type WorkspaceDetail struct {
