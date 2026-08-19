@@ -37,9 +37,22 @@ func (r *TaskRepository) Update(ctx context.Context, id uuid.UUID, columnID uuid
 		    position    = COALESCE($3, position),
 		    column_id   = COALESCE($4, column_id),
 		    updated_at  = NOW()
-		WHERE id = $5 AND column_id = $6
+		WHERE id = $5 AND column_id = $6 AND deleted_at IS NULL
 		RETURNING *
 	`, name, description, position, newColumnID, id, columnID)
+	if err != nil {
+		return models.Task{}, err
+	}
+	return pgx.CollectOneRow(rows, pgx.RowToStructByName[models.Task])
+}
+
+func (r *TaskRepository) SoftDelete(ctx context.Context, id uuid.UUID, columnID uuid.UUID) (models.Task, error) {
+	rows, err := r.db.Query(ctx, `
+		UPDATE tasks
+		SET deleted_at = NOW()
+		WHERE id = $1 AND column_id = $2 AND deleted_at IS NULL
+		RETURNING *
+	`, id, columnID)
 	if err != nil {
 		return models.Task{}, err
 	}

@@ -63,7 +63,7 @@ func (h *TaskHandler) Create(w http.ResponseWriter, r *http.Request) {
 
 	task, err := h.repo.Create(r.Context(), body.Name, body.Description, columnID)
 	if err != nil {
-		http.Error(w, "erreur serveur", http.StatusInternalServerError)
+		serverError(w, err)
 		return
 	}
 
@@ -102,7 +102,7 @@ func (h *TaskHandler) Update(w http.ResponseWriter, r *http.Request) {
 	if body.WorkspaceID != nil {
 		wsExists, err := h.workspaceRepo.Exists(r.Context(), *body.WorkspaceID, userID)
 		if err != nil {
-			http.Error(w, "erreur serveur", http.StatusInternalServerError)
+			serverError(w, err)
 			return
 		}
 		if !wsExists {
@@ -112,7 +112,7 @@ func (h *TaskHandler) Update(w http.ResponseWriter, r *http.Request) {
 
 		colExists, err := h.columnRepo.Exists(r.Context(), *body.TargetColumnID, *body.WorkspaceID)
 		if err != nil {
-			http.Error(w, "erreur serveur", http.StatusInternalServerError)
+			serverError(w, err)
 			return
 		}
 		if !colExists {
@@ -127,7 +127,32 @@ func (h *TaskHandler) Update(w http.ResponseWriter, r *http.Request) {
 			http.Error(w, "tâche introuvable", http.StatusNotFound)
 			return
 		}
-		http.Error(w, "erreur serveur", http.StatusInternalServerError)
+		serverError(w, err)
+		return
+	}
+
+	writeJSON(w, http.StatusOK, task)
+}
+
+func (h *TaskHandler) Delete(w http.ResponseWriter, r *http.Request) {
+	_, _, columnID, ok := h.parseTaskContext(w, r)
+	if !ok {
+		return
+	}
+
+	taskID, err := uuid.Parse(chi.URLParam(r, "taskId"))
+	if err != nil {
+		http.Error(w, "taskId invalide", http.StatusBadRequest)
+		return
+	}
+
+	task, err := h.repo.SoftDelete(r.Context(), taskID, columnID)
+	if err != nil {
+		if errors.Is(err, pgx.ErrNoRows) {
+			http.Error(w, "tâche introuvable", http.StatusNotFound)
+			return
+		}
+		serverError(w, err)
 		return
 	}
 

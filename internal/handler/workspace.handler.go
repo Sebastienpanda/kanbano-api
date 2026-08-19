@@ -24,7 +24,7 @@ func (h *WorkspaceHandler) List(w http.ResponseWriter, r *http.Request) {
 
 	workspaces, err := h.repo.List(r.Context(), userID)
 	if err != nil {
-		http.Error(w, "erreur serveur", http.StatusInternalServerError)
+		serverError(w, err)
 		return
 	}
 
@@ -36,7 +36,7 @@ func (h *WorkspaceHandler) Recent(w http.ResponseWriter, r *http.Request) {
 
 	workspaces, err := h.repo.ListRecent(r.Context(), userID)
 	if err != nil {
-		http.Error(w, "erreur serveur", http.StatusInternalServerError)
+		serverError(w, err)
 		return
 	}
 
@@ -48,7 +48,7 @@ func (h *WorkspaceHandler) Names(w http.ResponseWriter, r *http.Request) {
 
 	names, err := h.repo.ListNames(r.Context(), userID)
 	if err != nil {
-		http.Error(w, "erreur serveur", http.StatusInternalServerError)
+		serverError(w, err)
 		return
 	}
 
@@ -69,7 +69,7 @@ func (h *WorkspaceHandler) Create(w http.ResponseWriter, r *http.Request) {
 
 	workspace, err := h.repo.Create(r.Context(), body.Name, body.Description, userID)
 	if err != nil {
-		http.Error(w, "erreur serveur", http.StatusInternalServerError)
+		serverError(w, err)
 		return
 	}
 
@@ -91,7 +91,7 @@ func (h *WorkspaceHandler) Get(w http.ResponseWriter, r *http.Request) {
 			http.Error(w, "workspace introuvable", http.StatusNotFound)
 			return
 		}
-		http.Error(w, "erreur serveur", http.StatusInternalServerError)
+		serverError(w, err)
 		return
 	}
 
@@ -122,7 +122,29 @@ func (h *WorkspaceHandler) Update(w http.ResponseWriter, r *http.Request) {
 			http.Error(w, "workspace introuvable", http.StatusNotFound)
 			return
 		}
-		http.Error(w, "erreur serveur", http.StatusInternalServerError)
+		serverError(w, err)
+		return
+	}
+
+	writeJSON(w, http.StatusOK, workspace)
+}
+
+func (h *WorkspaceHandler) Delete(w http.ResponseWriter, r *http.Request) {
+	userID := userIDFromContext(r)
+
+	workspaceID, err := uuid.Parse(chi.URLParam(r, "id"))
+	if err != nil {
+		http.Error(w, "id invalide", http.StatusBadRequest)
+		return
+	}
+
+	workspace, err := h.repo.SoftDelete(r.Context(), workspaceID, userID)
+	if err != nil {
+		if errors.Is(err, pgx.ErrNoRows) {
+			http.Error(w, "workspace introuvable", http.StatusNotFound)
+			return
+		}
+		serverError(w, err)
 		return
 	}
 

@@ -20,7 +20,7 @@ func NewWorkspaceRepository(db *pgxpool.Pool) *WorkspaceRepository {
 
 func (r *WorkspaceRepository) List(ctx context.Context, userID uuid.UUID) ([]models.Workspace, error) {
 	rows, err := r.db.Query(ctx,
-		"SELECT id, name, description, user_id, created_at, updated_at FROM workspaces WHERE user_id = $1 ORDER BY created_at DESC",
+		"SELECT id, name, description, user_id, created_at, updated_at, deleted_at FROM workspaces WHERE user_id = $1 AND deleted_at IS NULL ORDER BY created_at DESC",
 		userID)
 	if err != nil {
 		return nil, err
@@ -30,7 +30,7 @@ func (r *WorkspaceRepository) List(ctx context.Context, userID uuid.UUID) ([]mod
 
 func (r *WorkspaceRepository) ListRecent(ctx context.Context, userID uuid.UUID) ([]models.Workspace, error) {
 	rows, err := r.db.Query(ctx,
-		"SELECT id, name, description, user_id, created_at, updated_at FROM workspaces WHERE user_id = $1 ORDER BY created_at DESC LIMIT 6",
+		"SELECT id, name, description, user_id, created_at, updated_at, deleted_at FROM workspaces WHERE user_id = $1 AND deleted_at IS NULL ORDER BY created_at DESC LIMIT 6",
 		userID)
 	if err != nil {
 		return nil, err
@@ -40,7 +40,7 @@ func (r *WorkspaceRepository) ListRecent(ctx context.Context, userID uuid.UUID) 
 
 func (r *WorkspaceRepository) ListNames(ctx context.Context, userID uuid.UUID) ([]models.WorkspaceName, error) {
 	rows, err := r.db.Query(ctx,
-		"SELECT id, name FROM workspaces WHERE user_id = $1 ORDER BY created_at DESC",
+		"SELECT id, name FROM workspaces WHERE user_id = $1 AND deleted_at IS NULL ORDER BY created_at DESC",
 		userID)
 	if err != nil {
 		return nil, err
@@ -51,7 +51,7 @@ func (r *WorkspaceRepository) ListNames(ctx context.Context, userID uuid.UUID) (
 func (r *WorkspaceRepository) GetIDByName(ctx context.Context, name string, userID uuid.UUID) (uuid.UUID, error) {
 	var id uuid.UUID
 	err := r.db.QueryRow(ctx,
-		"SELECT id FROM workspaces WHERE name = $1 AND user_id = $2 ORDER BY created_at DESC LIMIT 1",
+		"SELECT id FROM workspaces WHERE name = $1 AND user_id = $2 AND deleted_at IS NULL ORDER BY created_at DESC LIMIT 1",
 		name, userID).Scan(&id)
 	return id, err
 }
@@ -73,9 +73,9 @@ func (r *WorkspaceRepository) GetByID(ctx context.Context, id uuid.UUID, userID 
 			c.id, c.name, c.position, c.workspace_id, c.created_at, c.updated_at,
 			t.id, t.name, t.description, t.position, t.column_id, t.created_at, t.updated_at
 		FROM workspaces w
-		LEFT JOIN columns c ON c.workspace_id = w.id
-		LEFT JOIN tasks t ON t.column_id = c.id
-		WHERE w.id = $1 AND w.user_id = $2
+		LEFT JOIN columns c ON c.workspace_id = w.id AND c.deleted_at IS NULL
+		LEFT JOIN tasks t ON t.column_id = c.id AND t.deleted_at IS NULL
+		WHERE w.id = $1 AND w.user_id = $2 AND w.deleted_at IS NULL
 		ORDER BY c.position ASC, t.position ASC
 	`, id, userID)
 	if err != nil {
@@ -181,7 +181,7 @@ func (r *WorkspaceRepository) Update(ctx context.Context, id uuid.UUID, userID u
 		SET name        = COALESCE($1, name),
 		    description = COALESCE($2, description),
 		    updated_at  = NOW()
-		WHERE id = $3 AND user_id = $4
+		WHERE id = $3 AND user_id = $4 AND deleted_at IS NULL
 		RETURNING *
 	`, name, description, id, userID)
 	if err != nil {
@@ -193,9 +193,57 @@ func (r *WorkspaceRepository) Update(ctx context.Context, id uuid.UUID, userID u
 func (r *WorkspaceRepository) Exists(ctx context.Context, id uuid.UUID, userID uuid.UUID) (bool, error) {
 	var exists bool
 	err := r.db.QueryRow(ctx,
-		"SELECT EXISTS(SELECT 1 FROM workspaces WHERE id = $1 AND user_id = $2)",
+		"SELECT EXISTS(SELECT 1 FROM workspaces WHERE id = $1 AND user_id = $2 AND deleted_at IS NULL)",
 		id, userID).Scan(&exists)
 	return exists, err
+}
+
+func (r *WorkspaceRepository) SoftDelete(ctx context.Context, id uuid.UUID, userID uuid.UUID) (models.Workspace, error) {
+	tx, err := r.db.Begin(ctx)
+	if err != nil {
+		return models.Workspace{}, err
+	}
+	defer tx.Rollback(ctx)
+
+	rows, err := tx.Query(ctx, `
+		UPDATE workspaces
+		SET deleted_at = NOW()
+		WHERE id = $1 AND user_id = $2 AND deleted_at IS NULL
+		RETURNING *
+	`, id, userID)
+	if err != nil {
+		return models.Workspace{}, err
+	}
+	workspace, err := pgx.CollectOneRow(rows, pgx.RowToStructByName[models.Workspace])
+	if err != nil {
+		return models.Workspace{}, err
+	}
+
+	_, err = tx.Exec(ctx, `
+		UPDATE columns SET deleted_at = NOW()
+		WHERE workspace_id = $1 AND deleted_at IS NULL
+	`, id)
+
+	if err != nil {
+		return models.Workspace{}, err
+	}
+
+	_, err = tx.Exec(ctx, `
+		UPDATE tasks SET deleted_at = NOW()
+		WHERE deleted_at IS NULL AND column_id IN (SELECT id FROM columns WHERE workspace_id = $1)
+	`, id)
+
+	if err != nil {
+		return models.Workspace{}, err
+	}
+
+	err = tx.Commit(ctx)
+
+	if err != nil {
+		return models.Workspace{}, err
+	}
+
+	return workspace, nil
 }
 
 func derefStr(s *string) string {
