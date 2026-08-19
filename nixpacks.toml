@@ -1,11 +1,11 @@
 [phases.install]
 cmds = [
   "go mod download",
-  "go install -tags 'pgx5' github.com/golang-migrate/migrate/v4/cmd/migrate@v4.18.1"
+  "GOBIN=/app/bin go install -tags 'pgx5' github.com/golang-migrate/migrate/v4/cmd/migrate@v4.18.1"
 ]
 
 [phases.build]
 cmds = ["go build -o bin/server ."]
 
 [start]
-cmd = "migrate -path internal/db/migrations -database \"$DATABASE_URL_MIGRATE\" up && ./bin/server"
+cmd = "./bin/migrate -path internal/db/migrations -database \"$DATABASE_URL_MIGRATE\" up && ./bin/server"
