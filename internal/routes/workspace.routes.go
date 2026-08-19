@@ -20,12 +20,15 @@ func WorkspacesRoutes(r chi.Router, wh *handler.WorkspaceHandler, ch *handler.Co
 		r.Route("/{id}", func(r chi.Router) {
 			r.Get("/", wh.Get)
 			r.Patch("/", wh.Update)
+			r.Delete("/", wh.Delete)
 
 			r.Post("/columns", ch.Create)
 			r.Patch("/columns/{columnId}", ch.Update)
+			r.Delete("/columns/{columnId}", ch.Delete)
 
 			r.Post("/columns/{columnId}/tasks", th.Create)
 			r.Patch("/columns/{columnId}/tasks/{taskId}", th.Update)
+			r.Delete("/columns/{columnId}/tasks/{taskId}", th.Delete)
 		})
 	})
 }

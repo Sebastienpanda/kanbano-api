@@ -35,13 +35,13 @@ func (h *ColumnHandler) NamesByWorkspaceName(w http.ResponseWriter, r *http.Requ
 			http.Error(w, "workspace introuvable", http.StatusNotFound)
 			return
 		}
-		http.Error(w, "erreur serveur", http.StatusInternalServerError)
+		serverError(w, err)
 		return
 	}
 
 	names, err := h.repo.ListNames(r.Context(), workspaceID)
 	if err != nil {
-		http.Error(w, "erreur serveur", http.StatusInternalServerError)
+		serverError(w, err)
 		return
 	}
 
@@ -73,7 +73,7 @@ func (h *ColumnHandler) Create(w http.ResponseWriter, r *http.Request) {
 
 	column, err := h.repo.Create(r.Context(), body.Name, workspaceID)
 	if err != nil {
-		http.Error(w, "erreur serveur", http.StatusInternalServerError)
+		serverError(w, err)
 		return
 	}
 
@@ -116,7 +116,41 @@ func (h *ColumnHandler) Update(w http.ResponseWriter, r *http.Request) {
 			http.Error(w, "colonne introuvable", http.StatusNotFound)
 			return
 		}
-		http.Error(w, "erreur serveur", http.StatusInternalServerError)
+		serverError(w, err)
+		return
+	}
+
+	writeJSON(w, http.StatusOK, column)
+}
+
+func (h *ColumnHandler) Delete(w http.ResponseWriter, r *http.Request) {
+	userID := userIDFromContext(r)
+
+	workspaceID, err := uuid.Parse(chi.URLParam(r, "id"))
+	if err != nil {
+		http.Error(w, "id invalide", http.StatusBadRequest)
+		return
+	}
+
+	columnID, err := uuid.Parse(chi.URLParam(r, "columnId"))
+	if err != nil {
+		http.Error(w, "columnId invalide", http.StatusBadRequest)
+		return
+	}
+
+	exists, err := h.workspaceRepo.Exists(r.Context(), workspaceID, userID)
+	if err != nil || !exists {
+		http.Error(w, "workspace introuvable", http.StatusNotFound)
+		return
+	}
+
+	column, err := h.repo.SoftDelete(r.Context(), columnID, workspaceID)
+	if err != nil {
+		if errors.Is(err, pgx.ErrNoRows) {
+			http.Error(w, "colonne introuvable", http.StatusNotFound)
+			return
+		}
+		serverError(w, err)
 		return
 	}
 
