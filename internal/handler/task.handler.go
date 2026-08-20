@@ -15,10 +15,39 @@ type TaskHandler struct {
 	repo          *repository.TaskRepository
 	workspaceRepo *repository.WorkspaceRepository
 	columnRepo    *repository.ColumnRepository
+	stateRepo     *repository.StateRepository
 }
 
-func NewTaskHandler(repo *repository.TaskRepository, workspaceRepo *repository.WorkspaceRepository, columnRepo *repository.ColumnRepository) *TaskHandler {
-	return &TaskHandler{repo: repo, workspaceRepo: workspaceRepo, columnRepo: columnRepo}
+func NewTaskHandler(repo *repository.TaskRepository, workspaceRepo *repository.WorkspaceRepository, columnRepo *repository.ColumnRepository, stateRepo *repository.StateRepository) *TaskHandler {
+	return &TaskHandler{repo: repo, workspaceRepo: workspaceRepo, columnRepo: columnRepo, stateRepo: stateRepo}
+}
+
+// resolveStateID détermine le state_id à appliquer : stateID s'il est fourni, sinon
+// stateName crée (ou récupère) le statut correspondant pour le user.
+func (h *TaskHandler) resolveStateID(w http.ResponseWriter, r *http.Request, userID uuid.UUID, stateID *uuid.UUID, stateName *string) (*uuid.UUID, bool) {
+	if stateID != nil {
+		exists, err := h.stateRepo.Exists(r.Context(), *stateID, userID)
+		if err != nil {
+			serverError(w, err)
+			return nil, false
+		}
+		if !exists {
+			http.Error(w, "statut introuvable", http.StatusNotFound)
+			return nil, false
+		}
+		return stateID, true
+	}
+
+	if stateName != nil && *stateName != "" {
+		state, err := h.stateRepo.GetOrCreate(r.Context(), userID, *stateName)
+		if err != nil {
+			serverError(w, err)
+			return nil, false
+		}
+		return &state.ID, true
+	}
+
+	return nil, true
 }
 
 func (h *TaskHandler) parseTaskContext(w http.ResponseWriter, r *http.Request) (userID, workspaceID, columnID uuid.UUID, ok bool) {
@@ -47,21 +76,28 @@ func (h *TaskHandler) parseTaskContext(w http.ResponseWriter, r *http.Request) (
 }
 
 func (h *TaskHandler) Create(w http.ResponseWriter, r *http.Request) {
-	_, _, columnID, ok := h.parseTaskContext(w, r)
+	userID, _, columnID, ok := h.parseTaskContext(w, r)
 	if !ok {
 		return
 	}
 
 	var body struct {
-		Name        string  `json:"name"`
-		Description *string `json:"description"`
+		Name        string     `json:"name"`
+		Description *string    `json:"description"`
+		StateID     *uuid.UUID `json:"state_id"`
+		StateName   *string    `json:"state_name"`
 	}
 	if err := json.NewDecoder(r.Body).Decode(&body); err != nil || body.Name == "" {
 		http.Error(w, "body invalide", http.StatusBadRequest)
 		return
 	}
 
-	task, err := h.repo.Create(r.Context(), body.Name, body.Description, columnID)
+	stateID, ok := h.resolveStateID(w, r, userID, body.StateID, body.StateName)
+	if !ok {
+		return
+	}
+
+	task, err := h.repo.Create(r.Context(), body.Name, body.Description, columnID, stateID)
 	if err != nil {
 		serverError(w, err)
 		return
@@ -88,6 +124,8 @@ func (h *TaskHandler) Update(w http.ResponseWriter, r *http.Request) {
 		Position       *int       `json:"position"`
 		WorkspaceID    *uuid.UUID `json:"workspaceId"`
 		TargetColumnID *uuid.UUID `json:"targetColumnId"`
+		StateID        *uuid.UUID `json:"state_id"`
+		StateName      *string    `json:"state_name"`
 	}
 	if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
 		http.Error(w, "body invalide", http.StatusBadRequest)
@@ -121,7 +159,12 @@ func (h *TaskHandler) Update(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 
-	task, err := h.repo.Update(r.Context(), taskID, columnID, body.Name, body.Description, body.Position, body.TargetColumnID)
+	stateID, ok := h.resolveStateID(w, r, userID, body.StateID, body.StateName)
+	if !ok {
+		return
+	}
+
+	task, err := h.repo.Update(r.Context(), taskID, columnID, body.Name, body.Description, body.Position, body.TargetColumnID, stateID)
 	if err != nil {
 		if errors.Is(err, pgx.ErrNoRows) {
 			http.Error(w, "tâche introuvable", http.StatusNotFound)

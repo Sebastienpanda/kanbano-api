@@ -1,0 +1,18 @@
+package routes
+
+import (
+	"kanbano-api/internal/handler"
+	"kanbano-api/internal/middleware"
+
+	"github.com/go-chi/chi/v5"
+)
+
+func StatesRoutes(r chi.Router, wh *handler.StateHandler) {
+
+	r.Route("/states", func(r chi.Router) {
+		r.Use(middleware.AuthRequired)
+
+		r.Get("/", wh.List)
+		r.Post("/", wh.Create)
+	})
+}

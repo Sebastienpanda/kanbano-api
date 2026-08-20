@@ -12,12 +12,15 @@ func RegisterRoutes(r *chi.Mux, pool *pgxpool.Pool) {
 	workspaceRepo := repository.NewWorkspaceRepository(pool)
 	columnRepo := repository.NewColumnRepository(pool)
 	taskRepo := repository.NewTaskRepository(pool)
+	stateRepo := repository.NewStateRepository(pool)
 
 	workspaceHandler := handler.NewWorkspaceHandler(workspaceRepo)
 	columnHandler := handler.NewColumnHandler(columnRepo, workspaceRepo)
-	taskHandler := handler.NewTaskHandler(taskRepo, workspaceRepo, columnRepo)
+	taskHandler := handler.NewTaskHandler(taskRepo, workspaceRepo, columnRepo, stateRepo)
+	stateHandler := handler.NewStateHandler(stateRepo)
 
 	r.Route("/api/v1", func(r chi.Router) {
 		WorkspacesRoutes(r, workspaceHandler, columnHandler, taskHandler)
+		StatesRoutes(r, stateHandler)
 	})
 }
