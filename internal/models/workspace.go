@@ -24,6 +24,7 @@ type WorkspaceName struct {
 type WorkspaceDetail struct {
 	Workspace
 	Columns []ColumnWithTasks `json:"columns"`
+	States  []StateName       `json:"states"`
 }
 
 type ColumnWithTasks struct {

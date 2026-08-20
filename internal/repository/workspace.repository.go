@@ -71,7 +71,7 @@ func (r *WorkspaceRepository) GetByID(ctx context.Context, id uuid.UUID, userID 
 		SELECT
 			w.id, w.name, w.description, w.user_id, w.created_at, w.updated_at,
 			c.id, c.name, c.position, c.workspace_id, c.created_at, c.updated_at,
-			t.id, t.name, t.description, t.position, t.column_id, t.created_at, t.updated_at
+			t.id, t.name, t.description, t.position, t.column_id, t.state_id, t.created_at, t.updated_at
 		FROM workspaces w
 		LEFT JOIN columns c ON c.workspace_id = w.id AND c.deleted_at IS NULL
 		LEFT JOIN tasks t ON t.column_id = c.id AND t.deleted_at IS NULL
@@ -103,13 +103,14 @@ func (r *WorkspaceRepository) GetByID(ctx context.Context, id uuid.UUID, userID 
 			taskName                   *string
 			taskDesc                   *string
 			taskPos                    *int
+			taskStateID                *uuid.UUID
 			taskCreatedAt, taskUpdAt   *time.Time
 		)
 
 		if err := rows.Scan(
 			&wsID, &wsName, &wsDesc, &wsUserID, &wsCreatedAt, &wsUpdatedAt,
 			&colID, &colName, &colPos, &colWsID, &colCreatedAt, &colUpdatedAt,
-			&taskID, &taskName, &taskDesc, &taskPos, &taskColID, &taskCreatedAt, &taskUpdAt,
+			&taskID, &taskName, &taskDesc, &taskPos, &taskColID, &taskStateID, &taskCreatedAt, &taskUpdAt,
 		); err != nil {
 			return models.WorkspaceDetail{}, err
 		}
@@ -153,6 +154,7 @@ func (r *WorkspaceRepository) GetByID(ctx context.Context, id uuid.UUID, userID 
 				Description: taskDesc,
 				Position:    derefInt(taskPos),
 				ColumnID:    derefUUID(taskColID),
+				StateID:     taskStateID,
 				CreatedAt:   derefTime(taskCreatedAt),
 				UpdatedAt:   derefTime(taskUpdAt),
 			}
@@ -170,6 +172,15 @@ func (r *WorkspaceRepository) GetByID(ctx context.Context, id uuid.UUID, userID 
 	detail.Columns = make([]models.ColumnWithTasks, 0, len(columnOrder))
 	for _, colID := range columnOrder {
 		detail.Columns = append(detail.Columns, *columnsMap[colID])
+	}
+
+	stateRows, err := r.db.Query(ctx, "SELECT id, name FROM states WHERE user_id = $1 ORDER BY name", userID)
+	if err != nil {
+		return models.WorkspaceDetail{}, err
+	}
+	detail.States, err = pgx.CollectRows(stateRows, pgx.RowToStructByName[models.StateName])
+	if err != nil {
+		return models.WorkspaceDetail{}, err
 	}
 
 	return detail, nil

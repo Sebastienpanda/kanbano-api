@@ -17,29 +17,30 @@ func NewTaskRepository(db *pgxpool.Pool) *TaskRepository {
 	return &TaskRepository{db: db}
 }
 
-func (r *TaskRepository) Create(ctx context.Context, name string, description *string, columnID uuid.UUID) (models.Task, error) {
+func (r *TaskRepository) Create(ctx context.Context, name string, description *string, columnID uuid.UUID, stateID *uuid.UUID) (models.Task, error) {
 	rows, err := r.db.Query(ctx, `
-		INSERT INTO tasks (name, description, column_id, position)
-		VALUES ($1, $2, $3, (SELECT COALESCE(MAX(position) + 1, 0) FROM tasks WHERE column_id = $3))
+		INSERT INTO tasks (name, description, column_id, state_id, position)
+		VALUES ($1, $2, $3, $4, (SELECT COALESCE(MAX(position) + 1, 0) FROM tasks WHERE column_id = $3))
 		RETURNING *
-	`, name, description, columnID)
+	`, name, description, columnID, stateID)
 	if err != nil {
 		return models.Task{}, err
 	}
 	return pgx.CollectOneRow(rows, pgx.RowToStructByName[models.Task])
 }
 
-func (r *TaskRepository) Update(ctx context.Context, id uuid.UUID, columnID uuid.UUID, name *string, description *string, position *int, newColumnID *uuid.UUID) (models.Task, error) {
+func (r *TaskRepository) Update(ctx context.Context, id uuid.UUID, columnID uuid.UUID, name *string, description *string, position *int, newColumnID *uuid.UUID, stateID *uuid.UUID) (models.Task, error) {
 	rows, err := r.db.Query(ctx, `
 		UPDATE tasks
 		SET name        = COALESCE($1, name),
 		    description = COALESCE($2, description),
 		    position    = COALESCE($3, position),
 		    column_id   = COALESCE($4, column_id),
+		    state_id    = COALESCE($5, state_id),
 		    updated_at  = NOW()
-		WHERE id = $5 AND column_id = $6 AND deleted_at IS NULL
+		WHERE id = $6 AND column_id = $7 AND deleted_at IS NULL
 		RETURNING *
-	`, name, description, position, newColumnID, id, columnID)
+	`, name, description, position, newColumnID, stateID, id, columnID)
 	if err != nil {
 		return models.Task{}, err
 	}
