@@ -3,6 +3,7 @@ package middleware
 import (
 	"context"
 	"net/http"
+	"os"
 	"strings"
 
 	"github.com/MicahParks/keyfunc/v3"
@@ -23,6 +24,17 @@ func InitJWKS(jwksURL string) error {
 
 func AuthRequired(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if os.Getenv("DEV_SKIP_AUTH") == "true" {
+			testUserID := r.Header.Get("X-Test-User")
+			if testUserID == "" {
+				http.Error(w, "DEV_SKIP_AUTH actif: header X-Test-User requis", http.StatusUnauthorized)
+				return
+			}
+			ctx := context.WithValue(r.Context(), UserIDKey, testUserID)
+			next.ServeHTTP(w, r.WithContext(ctx))
+			return
+		}
+
 		authHeader := r.Header.Get("Authorization")
 		if !strings.HasPrefix(authHeader, "Bearer ") {
 			http.Error(w, "token manquant", http.StatusUnauthorized)
