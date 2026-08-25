@@ -1,19 +1,28 @@
 package handler
 
 import (
-	"encoding/json"
 	"errors"
 	"kanbano-api/internal/repository"
 	"net/http"
 
-	"github.com/go-chi/chi/v5"
-	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
 )
 
 type ColumnHandler struct {
 	repo          *repository.ColumnRepository
 	workspaceRepo *repository.WorkspaceRepository
+}
+
+type createColumnBody struct {
+	Name string `json:"name"`
+}
+
+type updateColumnBody struct {
+	Name *string `json:"name"`
+}
+
+type reorderColumnBody struct {
+	Position int `json:"position"`
 }
 
 func NewColumnHandler(repo *repository.ColumnRepository, workspaceRepo *repository.WorkspaceRepository) *ColumnHandler {
@@ -51,9 +60,8 @@ func (h *ColumnHandler) NamesByWorkspaceName(w http.ResponseWriter, r *http.Requ
 func (h *ColumnHandler) Create(w http.ResponseWriter, r *http.Request) {
 	userID := userIDFromContext(r)
 
-	workspaceID, err := uuid.Parse(chi.URLParam(r, "id"))
-	if err != nil {
-		http.Error(w, "id invalide", http.StatusBadRequest)
+	workspaceID, ok := parseUUIDParam(w, r, "id")
+	if !ok {
 		return
 	}
 
@@ -63,10 +71,11 @@ func (h *ColumnHandler) Create(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	var body struct {
-		Name string `json:"name"`
+	body, ok := decodeJSON[createColumnBody](w, r)
+	if !ok {
+		return
 	}
-	if err := json.NewDecoder(r.Body).Decode(&body); err != nil || body.Name == "" {
+	if body.Name == "" {
 		http.Error(w, "body invalide", http.StatusBadRequest)
 		return
 	}
@@ -83,15 +92,12 @@ func (h *ColumnHandler) Create(w http.ResponseWriter, r *http.Request) {
 func (h *ColumnHandler) Update(w http.ResponseWriter, r *http.Request) {
 	userID := userIDFromContext(r)
 
-	workspaceID, err := uuid.Parse(chi.URLParam(r, "id"))
-	if err != nil {
-		http.Error(w, "id invalide", http.StatusBadRequest)
+	workspaceID, ok := parseUUIDParam(w, r, "id")
+	if !ok {
 		return
 	}
-
-	columnID, err := uuid.Parse(chi.URLParam(r, "columnId"))
-	if err != nil {
-		http.Error(w, "columnId invalide", http.StatusBadRequest)
+	columnID, ok := parseUUIDParam(w, r, "columnId")
+	if !ok {
 		return
 	}
 
@@ -101,22 +107,44 @@ func (h *ColumnHandler) Update(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	var body struct {
-		Name     *string `json:"name"`
-		Position *int    `json:"position"`
-	}
-	if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
-		http.Error(w, "body invalide", http.StatusBadRequest)
+	body, ok := decodeJSON[updateColumnBody](w, r)
+	if !ok {
 		return
 	}
 
-	column, err := h.repo.Update(r.Context(), columnID, workspaceID, body.Name, body.Position)
-	if err != nil {
-		if errors.Is(err, pgx.ErrNoRows) {
-			http.Error(w, "colonne introuvable", http.StatusNotFound)
-			return
-		}
-		serverError(w, err)
+	column, err := h.repo.Update(r.Context(), columnID, workspaceID, body.Name)
+	if handleRepoError(w, err, "colonne introuvable") {
+		return
+	}
+
+	writeJSON(w, http.StatusOK, column)
+}
+
+func (h *ColumnHandler) Reorder(w http.ResponseWriter, r *http.Request) {
+	userID := userIDFromContext(r)
+
+	workspaceID, ok := parseUUIDParam(w, r, "id")
+	if !ok {
+		return
+	}
+	columnID, ok := parseUUIDParam(w, r, "columnId")
+	if !ok {
+		return
+	}
+
+	exists, err := h.workspaceRepo.Exists(r.Context(), workspaceID, userID)
+	if err != nil || !exists {
+		http.Error(w, "workspace introuvable", http.StatusNotFound)
+		return
+	}
+
+	body, ok := decodeJSON[reorderColumnBody](w, r)
+	if !ok {
+		return
+	}
+
+	column, err := h.repo.Reorder(r.Context(), columnID, workspaceID, body.Position)
+	if handleRepoError(w, err, "colonne introuvable") {
 		return
 	}
 
@@ -126,15 +154,12 @@ func (h *ColumnHandler) Update(w http.ResponseWriter, r *http.Request) {
 func (h *ColumnHandler) Delete(w http.ResponseWriter, r *http.Request) {
 	userID := userIDFromContext(r)
 
-	workspaceID, err := uuid.Parse(chi.URLParam(r, "id"))
-	if err != nil {
-		http.Error(w, "id invalide", http.StatusBadRequest)
+	workspaceID, ok := parseUUIDParam(w, r, "id")
+	if !ok {
 		return
 	}
-
-	columnID, err := uuid.Parse(chi.URLParam(r, "columnId"))
-	if err != nil {
-		http.Error(w, "columnId invalide", http.StatusBadRequest)
+	columnID, ok := parseUUIDParam(w, r, "columnId")
+	if !ok {
 		return
 	}
 
@@ -145,12 +170,7 @@ func (h *ColumnHandler) Delete(w http.ResponseWriter, r *http.Request) {
 	}
 
 	column, err := h.repo.SoftDelete(r.Context(), columnID, workspaceID)
-	if err != nil {
-		if errors.Is(err, pgx.ErrNoRows) {
-			http.Error(w, "colonne introuvable", http.StatusNotFound)
-			return
-		}
-		serverError(w, err)
+	if handleRepoError(w, err, "colonne introuvable") {
 		return
 	}
 

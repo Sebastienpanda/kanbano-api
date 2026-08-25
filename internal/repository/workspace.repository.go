@@ -71,23 +71,14 @@ func (r *WorkspaceRepository) GetByID(ctx context.Context, id uuid.UUID, userID 
 		SELECT
 			w.id, w.name, w.description, w.user_id, w.created_at, w.updated_at,
 			c.id, c.name, c.position, c.workspace_id, c.created_at, c.updated_at,
-			t.id, t.name, t.description, t.position, t.column_id, t.state_id, t.created_at, t.updated_at, t.position_updated_at,
+			t.id, t.name, t.description, t.position, t.column_id, t.state_id, t.created_at, t.updated_at,
 			s.id, s.name
 		FROM workspaces w
 		LEFT JOIN columns c ON c.workspace_id = w.id AND c.deleted_at IS NULL
 		LEFT JOIN tasks t ON t.column_id = c.id AND t.deleted_at IS NULL
 		LEFT JOIN states s ON s.id = t.state_id
 		WHERE w.id = $1 AND w.user_id = $2 AND w.deleted_at IS NULL
-		ORDER BY
-			c.position,
-			CASE
-				WHEN t.position_updated_at IS NULL AND t.updated_at > t.created_at THEN 0
-				WHEN t.position_updated_at IS NOT NULL THEN 1
-				ELSE 2
-			END,
-			CASE WHEN t.position_updated_at IS NULL AND t.updated_at > t.created_at THEN t.updated_at END DESC,
-			CASE WHEN t.position_updated_at IS NOT NULL THEN t.position END,
-			t.created_at DESC
+		ORDER BY c.position, t.position, t.created_at DESC
 	`, id, userID)
 	if err != nil {
 		return models.WorkspaceDetail{}, err
@@ -116,17 +107,17 @@ func (r *WorkspaceRepository) GetByID(ctx context.Context, id uuid.UUID, userID 
 			taskPos                    *int
 			taskStateID                *uuid.UUID
 			taskCreatedAt, taskUpdAt   *time.Time
-			taskPosUpdatedAt           *time.Time
 			stateID                    *uuid.UUID
 			stateName                  *string
 		)
 
-		if err := rows.Scan(
+		err := rows.Scan(
 			&wsID, &wsName, &wsDesc, &wsUserID, &wsCreatedAt, &wsUpdatedAt,
 			&colID, &colName, &colPos, &colWsID, &colCreatedAt, &colUpdatedAt,
-			&taskID, &taskName, &taskDesc, &taskPos, &taskColID, &taskStateID, &taskCreatedAt, &taskUpdAt, &taskPosUpdatedAt,
+			&taskID, &taskName, &taskDesc, &taskPos, &taskColID, &taskStateID, &taskCreatedAt, &taskUpdAt,
 			&stateID, &stateName,
-		); err != nil {
+		)
+		if err != nil {
 			return models.WorkspaceDetail{}, err
 		}
 
@@ -165,15 +156,14 @@ func (r *WorkspaceRepository) GetByID(ctx context.Context, id uuid.UUID, userID 
 		if taskID != nil {
 			task := models.TaskWithState{
 				Task: models.Task{
-					ID:                *taskID,
-					Name:              derefStr(taskName),
-					Description:       taskDesc,
-					Position:          derefInt(taskPos),
-					ColumnID:          derefUUID(taskColID),
-					StateID:           taskStateID,
-					CreatedAt:         derefTime(taskCreatedAt),
-					UpdatedAt:         derefTime(taskUpdAt),
-					PositionUpdatedAt: taskPosUpdatedAt,
+					ID:          *taskID,
+					Name:        derefStr(taskName),
+					Description: taskDesc,
+					Position:    derefInt(taskPos),
+					ColumnID:    derefUUID(taskColID),
+					StateID:     taskStateID,
+					CreatedAt:   derefTime(taskCreatedAt),
+					UpdatedAt:   derefTime(taskUpdAt),
 				},
 			}
 			if stateID != nil {
@@ -183,9 +173,12 @@ func (r *WorkspaceRepository) GetByID(ctx context.Context, id uuid.UUID, userID 
 		}
 	}
 
-	if err := rows.Err(); err != nil {
+	err = rows.Err()
+
+	if err != nil {
 		return models.WorkspaceDetail{}, err
 	}
+
 	if !initialized {
 		return models.WorkspaceDetail{}, pgx.ErrNoRows
 	}

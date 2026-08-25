@@ -22,17 +22,17 @@ func main() {
 
 	pool, err := pgxpool.New(context.Background(), os.Getenv("DATABASE_URL"))
 	if err != nil {
-		log.Fatal("Connexion DB échouée:", err)
+		log.Fatal("DB connection failed:", err)
 	}
 	defer pool.Close()
 
 	if err := pool.Ping(context.Background()); err != nil {
-		log.Fatal("DB ne répond pas:", err)
+		log.Fatal("DB not responding:", err)
 	}
-	log.Println("DB connectée ✅")
+	log.Println("DB connected ✅")
 
 	err = appMiddleware.InitJWKS(os.Getenv("NEON_AUTH_JWKS_URL"))
-	log.Println("JWKS initialisé ✅")
+	log.Println("JWKS initialized ✅")
 
 	r := chi.NewRouter()
 	r.Use(middleware.Logger)
