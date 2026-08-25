@@ -22,17 +22,21 @@ func main() {
 
 	pool, err := pgxpool.New(context.Background(), os.Getenv("DATABASE_URL"))
 	if err != nil {
-		log.Fatal("DB connection failed:", err)
+		log.Fatalf("failed to create database connection pool: %v", err)
 	}
 	defer pool.Close()
 
-	if err := pool.Ping(context.Background()); err != nil {
-		log.Fatal("DB not responding:", err)
+	err = pool.Ping(context.Background())
+	if err != nil {
+		log.Fatalf("database ping failed: %v", err)
 	}
-	log.Println("DB connected ✅")
+	log.Println("database connection established")
 
 	err = appMiddleware.InitJWKS(os.Getenv("NEON_AUTH_JWKS_URL"))
-	log.Println("JWKS initialized ✅")
+	if err != nil {
+		log.Fatalf("failed to initialize JWKS: %v", err)
+	}
+	log.Println("JWKS initialized successfully")
 
 	r := chi.NewRouter()
 	r.Use(middleware.Logger)
@@ -45,10 +49,10 @@ func main() {
 
 	routes.RegisterRoutes(r, pool)
 
-	log.Println("Server running in :3000")
+	log.Println("server listening on port 3000")
 
 	err = http.ListenAndServe(":3000", r)
 	if err != nil {
-		return
+		log.Fatalf("server stopped: %v", err)
 	}
 }

@@ -26,7 +26,7 @@ func AuthRequired(next http.Handler) http.Handler {
 
 		authHeader := r.Header.Get("Authorization")
 		if !strings.HasPrefix(authHeader, "Bearer ") {
-			http.Error(w, "token manquant", http.StatusUnauthorized)
+			http.Error(w, "missing token", http.StatusUnauthorized)
 			return
 		}
 
@@ -34,12 +34,21 @@ func AuthRequired(next http.Handler) http.Handler {
 
 		token, err := jwt.Parse(tokenStr, jwks.Keyfunc, jwt.WithValidMethods([]string{"EdDSA"}))
 		if err != nil || !token.Valid {
-			http.Error(w, "token invalide", http.StatusUnauthorized)
+			http.Error(w, "invalid token", http.StatusUnauthorized)
 			return
 		}
 
-		claims := token.Claims.(jwt.MapClaims)
-		userID := claims["sub"].(string)
+		claims, ok := token.Claims.(jwt.MapClaims)
+		if !ok {
+			http.Error(w, "invalid token", http.StatusUnauthorized)
+			return
+		}
+
+		userID, ok := claims["sub"].(string)
+		if !ok {
+			http.Error(w, "invalid token", http.StatusUnauthorized)
+			return
+		}
 
 		ctx := context.WithValue(r.Context(), UserIDKey, userID)
 		next.ServeHTTP(w, r.WithContext(ctx))

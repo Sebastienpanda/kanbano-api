@@ -50,9 +50,10 @@ func (r *WorkspaceRepository) ListNames(ctx context.Context, userID uuid.UUID) (
 
 func (r *WorkspaceRepository) GetIDByName(ctx context.Context, name string, userID uuid.UUID) (uuid.UUID, error) {
 	var id uuid.UUID
-	err := r.db.QueryRow(ctx,
+	row := r.db.QueryRow(ctx,
 		"SELECT id FROM workspaces WHERE name = $1 AND user_id = $2 AND deleted_at IS NULL ORDER BY created_at DESC LIMIT 1",
-		name, userID).Scan(&id)
+		name, userID)
+	err := row.Scan(&id)
 	return id, err
 }
 
@@ -72,7 +73,7 @@ func (r *WorkspaceRepository) GetByID(ctx context.Context, id uuid.UUID, userID 
 			w.id, w.name, w.description, w.user_id, w.created_at, w.updated_at,
 			c.id, c.name, c.position, c.workspace_id, c.created_at, c.updated_at,
 			t.id, t.name, t.description, t.position, t.column_id, t.state_id, t.created_at, t.updated_at,
-			s.id, s.name
+			s.id, s.name, s.color
 		FROM workspaces w
 		LEFT JOIN columns c ON c.workspace_id = w.id AND c.deleted_at IS NULL
 		LEFT JOIN tasks t ON t.column_id = c.id AND t.deleted_at IS NULL
@@ -109,13 +110,14 @@ func (r *WorkspaceRepository) GetByID(ctx context.Context, id uuid.UUID, userID 
 			taskCreatedAt, taskUpdAt   *time.Time
 			stateID                    *uuid.UUID
 			stateName                  *string
+			stateColor                 *string
 		)
 
 		err := rows.Scan(
 			&wsID, &wsName, &wsDesc, &wsUserID, &wsCreatedAt, &wsUpdatedAt,
 			&colID, &colName, &colPos, &colWsID, &colCreatedAt, &colUpdatedAt,
 			&taskID, &taskName, &taskDesc, &taskPos, &taskColID, &taskStateID, &taskCreatedAt, &taskUpdAt,
-			&stateID, &stateName,
+			&stateID, &stateName, &stateColor,
 		)
 		if err != nil {
 			return models.WorkspaceDetail{}, err
@@ -167,7 +169,7 @@ func (r *WorkspaceRepository) GetByID(ctx context.Context, id uuid.UUID, userID 
 				},
 			}
 			if stateID != nil {
-				task.State = &models.StateName{ID: *stateID, Name: derefStr(stateName)}
+				task.State = &models.StateName{ID: *stateID, Name: derefStr(stateName), Color: stateColor}
 			}
 			columnsMap[*colID].Tasks = append(columnsMap[*colID].Tasks, task)
 		}
@@ -188,7 +190,7 @@ func (r *WorkspaceRepository) GetByID(ctx context.Context, id uuid.UUID, userID 
 		detail.Columns = append(detail.Columns, *columnsMap[colID])
 	}
 
-	stateRows, err := r.db.Query(ctx, "SELECT id, name FROM states WHERE user_id = $1 ORDER BY name", userID)
+	stateRows, err := r.db.Query(ctx, "SELECT id, name, color FROM states WHERE user_id = $1 ORDER BY name", userID)
 	if err != nil {
 		return models.WorkspaceDetail{}, err
 	}
@@ -217,9 +219,10 @@ func (r *WorkspaceRepository) Update(ctx context.Context, id uuid.UUID, userID u
 
 func (r *WorkspaceRepository) Exists(ctx context.Context, id uuid.UUID, userID uuid.UUID) (bool, error) {
 	var exists bool
-	err := r.db.QueryRow(ctx,
+	row := r.db.QueryRow(ctx,
 		"SELECT EXISTS(SELECT 1 FROM workspaces WHERE id = $1 AND user_id = $2 AND deleted_at IS NULL)",
-		id, userID).Scan(&exists)
+		id, userID)
+	err := row.Scan(&exists)
 	return exists, err
 }
 

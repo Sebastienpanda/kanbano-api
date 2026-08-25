@@ -5,6 +5,7 @@ import (
 	"kanbano-api/internal/repository"
 	"net/http"
 
+	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
 )
 
@@ -34,14 +35,14 @@ func (h *ColumnHandler) NamesByWorkspaceName(w http.ResponseWriter, r *http.Requ
 
 	name := r.URL.Query().Get("name")
 	if name == "" {
-		http.Error(w, "paramètre name manquant", http.StatusBadRequest)
+		http.Error(w, "missing name parameter", http.StatusBadRequest)
 		return
 	}
 
 	workspaceID, err := h.workspaceRepo.GetIDByName(r.Context(), name, userID)
 	if err != nil {
 		if errors.Is(err, pgx.ErrNoRows) {
-			http.Error(w, "workspace introuvable", http.StatusNotFound)
+			http.Error(w, "workspace not found", http.StatusNotFound)
 			return
 		}
 		serverError(w, err)
@@ -57,17 +58,14 @@ func (h *ColumnHandler) NamesByWorkspaceName(w http.ResponseWriter, r *http.Requ
 	writeJSON(w, http.StatusOK, names)
 }
 
+func (h *ColumnHandler) parseWorkspaceContext(w http.ResponseWriter, r *http.Request) (workspaceID uuid.UUID, ok bool) {
+	_, workspaceID, ok = requireWorkspace(w, r, h.workspaceRepo)
+	return workspaceID, ok
+}
+
 func (h *ColumnHandler) Create(w http.ResponseWriter, r *http.Request) {
-	userID := userIDFromContext(r)
-
-	workspaceID, ok := parseUUIDParam(w, r, "id")
+	workspaceID, ok := h.parseWorkspaceContext(w, r)
 	if !ok {
-		return
-	}
-
-	exists, err := h.workspaceRepo.Exists(r.Context(), workspaceID, userID)
-	if err != nil || !exists {
-		http.Error(w, "workspace introuvable", http.StatusNotFound)
 		return
 	}
 
@@ -76,34 +74,21 @@ func (h *ColumnHandler) Create(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	if body.Name == "" {
-		http.Error(w, "body invalide", http.StatusBadRequest)
+		http.Error(w, "invalid request body", http.StatusBadRequest)
 		return
 	}
 
 	column, err := h.repo.Create(r.Context(), body.Name, workspaceID)
-	if err != nil {
-		serverError(w, err)
-		return
-	}
-
-	writeJSON(w, http.StatusCreated, column)
+	respondCreated(w, column, err)
 }
 
 func (h *ColumnHandler) Update(w http.ResponseWriter, r *http.Request) {
-	userID := userIDFromContext(r)
-
-	workspaceID, ok := parseUUIDParam(w, r, "id")
+	workspaceID, ok := h.parseWorkspaceContext(w, r)
 	if !ok {
 		return
 	}
 	columnID, ok := parseUUIDParam(w, r, "columnId")
 	if !ok {
-		return
-	}
-
-	exists, err := h.workspaceRepo.Exists(r.Context(), workspaceID, userID)
-	if err != nil || !exists {
-		http.Error(w, "workspace introuvable", http.StatusNotFound)
 		return
 	}
 
@@ -113,7 +98,7 @@ func (h *ColumnHandler) Update(w http.ResponseWriter, r *http.Request) {
 	}
 
 	column, err := h.repo.Update(r.Context(), columnID, workspaceID, body.Name)
-	if handleRepoError(w, err, "colonne introuvable") {
+	if handleRepoError(w, err, "column not found") {
 		return
 	}
 
@@ -121,20 +106,12 @@ func (h *ColumnHandler) Update(w http.ResponseWriter, r *http.Request) {
 }
 
 func (h *ColumnHandler) Reorder(w http.ResponseWriter, r *http.Request) {
-	userID := userIDFromContext(r)
-
-	workspaceID, ok := parseUUIDParam(w, r, "id")
+	workspaceID, ok := h.parseWorkspaceContext(w, r)
 	if !ok {
 		return
 	}
 	columnID, ok := parseUUIDParam(w, r, "columnId")
 	if !ok {
-		return
-	}
-
-	exists, err := h.workspaceRepo.Exists(r.Context(), workspaceID, userID)
-	if err != nil || !exists {
-		http.Error(w, "workspace introuvable", http.StatusNotFound)
 		return
 	}
 
@@ -144,7 +121,7 @@ func (h *ColumnHandler) Reorder(w http.ResponseWriter, r *http.Request) {
 	}
 
 	column, err := h.repo.Reorder(r.Context(), columnID, workspaceID, body.Position)
-	if handleRepoError(w, err, "colonne introuvable") {
+	if handleRepoError(w, err, "column not found") {
 		return
 	}
 
@@ -152,9 +129,7 @@ func (h *ColumnHandler) Reorder(w http.ResponseWriter, r *http.Request) {
 }
 
 func (h *ColumnHandler) Delete(w http.ResponseWriter, r *http.Request) {
-	userID := userIDFromContext(r)
-
-	workspaceID, ok := parseUUIDParam(w, r, "id")
+	workspaceID, ok := h.parseWorkspaceContext(w, r)
 	if !ok {
 		return
 	}
@@ -163,14 +138,8 @@ func (h *ColumnHandler) Delete(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	exists, err := h.workspaceRepo.Exists(r.Context(), workspaceID, userID)
-	if err != nil || !exists {
-		http.Error(w, "workspace introuvable", http.StatusNotFound)
-		return
-	}
-
 	column, err := h.repo.SoftDelete(r.Context(), columnID, workspaceID)
-	if handleRepoError(w, err, "colonne introuvable") {
+	if handleRepoError(w, err, "column not found") {
 		return
 	}
 

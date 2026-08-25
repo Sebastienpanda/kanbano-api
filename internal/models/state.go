@@ -7,8 +7,9 @@ import (
 )
 
 type StateName struct {
-	ID   uuid.UUID `json:"id"`
-	Name string    `json:"name"`
+	ID    uuid.UUID `json:"id"`
+	Name  string    `json:"name"`
+	Color *string   `json:"color"`
 }
 
 type State struct {
