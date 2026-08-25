@@ -24,10 +24,12 @@ func WorkspacesRoutes(r chi.Router, wh *handler.WorkspaceHandler, ch *handler.Co
 
 			r.Post("/columns", ch.Create)
 			r.Patch("/columns/{columnId}", ch.Update)
+			r.Patch("/columns/{columnId}/reorder", ch.Reorder)
 			r.Delete("/columns/{columnId}", ch.Delete)
 
 			r.Post("/columns/{columnId}/tasks", th.Create)
 			r.Patch("/columns/{columnId}/tasks/{taskId}", th.Update)
+			r.Patch("/columns/{columnId}/tasks/{taskId}/reorder", th.Reorder)
 			r.Delete("/columns/{columnId}/tasks/{taskId}", th.Delete)
 		})
 	})

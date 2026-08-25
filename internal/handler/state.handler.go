@@ -1,13 +1,17 @@
 package handler
 
 import (
-	"encoding/json"
 	"kanbano-api/internal/repository"
 	"net/http"
 )
 
 type StateHandler struct {
 	repo *repository.StateRepository
+}
+
+type createStateBody struct {
+	Name  string  `json:"name"`
+	Color *string `json:"color"`
 }
 
 func NewStateHandler(repo *repository.StateRepository) *StateHandler {
@@ -29,13 +33,11 @@ func (h *StateHandler) List(w http.ResponseWriter, r *http.Request) {
 func (h *StateHandler) Create(w http.ResponseWriter, r *http.Request) {
 	userID := userIDFromContext(r)
 
-	var body struct {
-		Name  string  `json:"name"`
-		Color *string `json:"color"`
+	body, ok := decodeJSON[createStateBody](w, r)
+	if !ok {
+		return
 	}
-	err := json.NewDecoder(r.Body).Decode(&body)
-
-	if err != nil || body.Name == "" {
+	if body.Name == "" {
 		http.Error(w, "body invalide", http.StatusBadRequest)
 		return
 	}

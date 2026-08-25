@@ -78,7 +78,7 @@ func (r *WorkspaceRepository) GetByID(ctx context.Context, id uuid.UUID, userID 
 		LEFT JOIN tasks t ON t.column_id = c.id AND t.deleted_at IS NULL
 		LEFT JOIN states s ON s.id = t.state_id
 		WHERE w.id = $1 AND w.user_id = $2 AND w.deleted_at IS NULL
-		ORDER BY c.position ASC, t.position ASC
+		ORDER BY c.position, t.position, t.created_at DESC
 	`, id, userID)
 	if err != nil {
 		return models.WorkspaceDetail{}, err
@@ -111,12 +111,13 @@ func (r *WorkspaceRepository) GetByID(ctx context.Context, id uuid.UUID, userID 
 			stateName                  *string
 		)
 
-		if err := rows.Scan(
+		err := rows.Scan(
 			&wsID, &wsName, &wsDesc, &wsUserID, &wsCreatedAt, &wsUpdatedAt,
 			&colID, &colName, &colPos, &colWsID, &colCreatedAt, &colUpdatedAt,
 			&taskID, &taskName, &taskDesc, &taskPos, &taskColID, &taskStateID, &taskCreatedAt, &taskUpdAt,
 			&stateID, &stateName,
-		); err != nil {
+		)
+		if err != nil {
 			return models.WorkspaceDetail{}, err
 		}
 
@@ -172,9 +173,12 @@ func (r *WorkspaceRepository) GetByID(ctx context.Context, id uuid.UUID, userID 
 		}
 	}
 
-	if err := rows.Err(); err != nil {
+	err = rows.Err()
+
+	if err != nil {
 		return models.WorkspaceDetail{}, err
 	}
+
 	if !initialized {
 		return models.WorkspaceDetail{}, pgx.ErrNoRows
 	}

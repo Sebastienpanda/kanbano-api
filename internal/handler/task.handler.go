@@ -1,14 +1,11 @@
 package handler
 
 import (
-	"encoding/json"
-	"errors"
 	"kanbano-api/internal/repository"
 	"net/http"
 
 	"github.com/go-chi/chi/v5"
 	"github.com/google/uuid"
-	"github.com/jackc/pgx/v5"
 )
 
 type TaskHandler struct {
@@ -16,6 +13,25 @@ type TaskHandler struct {
 	workspaceRepo *repository.WorkspaceRepository
 	columnRepo    *repository.ColumnRepository
 	stateRepo     *repository.StateRepository
+}
+
+type createTaskBody struct {
+	Name        string     `json:"name"`
+	Description *string    `json:"description"`
+	StateID     *uuid.UUID `json:"state_id"`
+	StateName   *string    `json:"state_name"`
+}
+
+type updateTaskBody struct {
+	Name        *string    `json:"name"`
+	Description *string    `json:"description"`
+	StateID     *uuid.UUID `json:"state_id"`
+	StateName   *string    `json:"state_name"`
+}
+
+type reorderTaskBody struct {
+	Position       *int       `json:"position"`
+	TargetColumnID *uuid.UUID `json:"targetColumnId"`
 }
 
 func NewTaskHandler(repo *repository.TaskRepository, workspaceRepo *repository.WorkspaceRepository, columnRepo *repository.ColumnRepository, stateRepo *repository.StateRepository) *TaskHandler {
@@ -81,13 +97,11 @@ func (h *TaskHandler) Create(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	var body struct {
-		Name        string     `json:"name"`
-		Description *string    `json:"description"`
-		StateID     *uuid.UUID `json:"state_id"`
-		StateName   *string    `json:"state_name"`
+	body, ok := decodeJSON[createTaskBody](w, r)
+	if !ok {
+		return
 	}
-	if err := json.NewDecoder(r.Body).Decode(&body); err != nil || body.Name == "" {
+	if body.Name == "" {
 		http.Error(w, "body invalide", http.StatusBadRequest)
 		return
 	}
@@ -112,43 +126,54 @@ func (h *TaskHandler) Update(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	taskID, err := uuid.Parse(chi.URLParam(r, "taskId"))
-	if err != nil {
-		http.Error(w, "taskId invalide", http.StatusBadRequest)
+	taskID, ok := parseUUIDParam(w, r, "taskId")
+	if !ok {
 		return
 	}
 
-	var body struct {
-		Name           *string    `json:"name"`
-		Description    *string    `json:"description"`
-		Position       *int       `json:"position"`
-		WorkspaceID    *uuid.UUID `json:"workspaceId"`
-		TargetColumnID *uuid.UUID `json:"targetColumnId"`
-		StateID        *uuid.UUID `json:"state_id"`
-		StateName      *string    `json:"state_name"`
-	}
-	if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
-		http.Error(w, "body invalide", http.StatusBadRequest)
+	body, ok := decodeJSON[updateTaskBody](w, r)
+	if !ok {
 		return
 	}
 
-	if (body.WorkspaceID == nil) != (body.TargetColumnID == nil) {
-		http.Error(w, "workspaceId et targetColumnId doivent être fournis ensemble", http.StatusBadRequest)
+	stateID, ok := h.resolveStateID(w, r, userID, body.StateID, body.StateName)
+	if !ok {
 		return
 	}
 
-	if body.WorkspaceID != nil {
-		wsExists, err := h.workspaceRepo.Exists(r.Context(), *body.WorkspaceID, userID)
-		if err != nil {
-			serverError(w, err)
-			return
-		}
-		if !wsExists {
-			http.Error(w, "workspace cible introuvable", http.StatusNotFound)
-			return
-		}
+	task, err := h.repo.Update(r.Context(), taskID, columnID, body.Name, body.Description, stateID)
+	if handleRepoError(w, err, "tâche introuvable") {
+		return
+	}
 
-		colExists, err := h.columnRepo.Exists(r.Context(), *body.TargetColumnID, *body.WorkspaceID)
+	writeJSON(w, http.StatusOK, task)
+}
+
+// Reorder déplace une tâche à une nouvelle position, éventuellement vers une autre colonne
+// du même workspace (targetColumnId). Le back décale automatiquement les autres tâches.
+func (h *TaskHandler) Reorder(w http.ResponseWriter, r *http.Request) {
+	_, workspaceID, columnID, ok := h.parseTaskContext(w, r)
+	if !ok {
+		return
+	}
+
+	taskID, ok := parseUUIDParam(w, r, "taskId")
+	if !ok {
+		return
+	}
+
+	body, ok := decodeJSON[reorderTaskBody](w, r)
+	if !ok {
+		return
+	}
+
+	if body.TargetColumnID == nil && body.Position == nil {
+		http.Error(w, "position ou targetColumnId requis", http.StatusBadRequest)
+		return
+	}
+
+	if body.TargetColumnID != nil {
+		colExists, err := h.columnRepo.Exists(r.Context(), *body.TargetColumnID, workspaceID)
 		if err != nil {
 			serverError(w, err)
 			return
@@ -159,18 +184,8 @@ func (h *TaskHandler) Update(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 
-	stateID, ok := h.resolveStateID(w, r, userID, body.StateID, body.StateName)
-	if !ok {
-		return
-	}
-
-	task, err := h.repo.Update(r.Context(), taskID, columnID, body.Name, body.Description, body.Position, body.TargetColumnID, stateID)
-	if err != nil {
-		if errors.Is(err, pgx.ErrNoRows) {
-			http.Error(w, "tâche introuvable", http.StatusNotFound)
-			return
-		}
-		serverError(w, err)
+	task, err := h.repo.Reorder(r.Context(), taskID, columnID, body.Position, body.TargetColumnID)
+	if handleRepoError(w, err, "tâche introuvable") {
 		return
 	}
 
@@ -183,19 +198,13 @@ func (h *TaskHandler) Delete(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	taskID, err := uuid.Parse(chi.URLParam(r, "taskId"))
-	if err != nil {
-		http.Error(w, "taskId invalide", http.StatusBadRequest)
+	taskID, ok := parseUUIDParam(w, r, "taskId")
+	if !ok {
 		return
 	}
 
 	task, err := h.repo.SoftDelete(r.Context(), taskID, columnID)
-	if err != nil {
-		if errors.Is(err, pgx.ErrNoRows) {
-			http.Error(w, "tâche introuvable", http.StatusNotFound)
-			return
-		}
-		serverError(w, err)
+	if handleRepoError(w, err, "tâche introuvable") {
 		return
 	}
 
