@@ -67,17 +67,12 @@ func (h *WorkspaceHandler) Create(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	if body.Name == "" {
-		http.Error(w, "body invalide", http.StatusBadRequest)
+		http.Error(w, "invalid request body", http.StatusBadRequest)
 		return
 	}
 
 	workspace, err := h.repo.Create(r.Context(), body.Name, body.Description, userID)
-	if err != nil {
-		serverError(w, err)
-		return
-	}
-
-	writeJSON(w, http.StatusCreated, workspace)
+	respondCreated(w, workspace, err)
 }
 
 func (h *WorkspaceHandler) Get(w http.ResponseWriter, r *http.Request) {
@@ -89,7 +84,7 @@ func (h *WorkspaceHandler) Get(w http.ResponseWriter, r *http.Request) {
 	}
 
 	detail, err := h.repo.GetByID(r.Context(), workspaceID, userID)
-	if handleRepoError(w, err, "workspace introuvable") {
+	if handleRepoError(w, err, "workspace not found") {
 		return
 	}
 
@@ -110,7 +105,7 @@ func (h *WorkspaceHandler) Update(w http.ResponseWriter, r *http.Request) {
 	}
 
 	workspace, err := h.repo.Update(r.Context(), workspaceID, userID, body.Name, body.Description)
-	if handleRepoError(w, err, "workspace introuvable") {
+	if handleRepoError(w, err, "workspace not found") {
 		return
 	}
 
@@ -126,7 +121,7 @@ func (h *WorkspaceHandler) Delete(w http.ResponseWriter, r *http.Request) {
 	}
 
 	workspace, err := h.repo.SoftDelete(r.Context(), workspaceID, userID)
-	if handleRepoError(w, err, "workspace introuvable") {
+	if handleRepoError(w, err, "workspace not found") {
 		return
 	}
 

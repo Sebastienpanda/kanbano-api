@@ -34,7 +34,6 @@ func (r *StateRepository) Create(ctx context.Context, name string, color *string
 	return pgx.CollectOneRow(rows, pgx.RowToStructByName[models.State])
 }
 
-// GetOrCreate résout un statut par son nom pour un user : le crée s'il n'existe pas encore.
 func (r *StateRepository) GetOrCreate(ctx context.Context, userID uuid.UUID, name string) (models.State, error) {
 	rows, err := r.db.Query(ctx, `
 		INSERT INTO states (name, user_id)
@@ -50,6 +49,7 @@ func (r *StateRepository) GetOrCreate(ctx context.Context, userID uuid.UUID, nam
 
 func (r *StateRepository) Exists(ctx context.Context, id uuid.UUID, userID uuid.UUID) (bool, error) {
 	var exists bool
-	err := r.db.QueryRow(ctx, "SELECT EXISTS(SELECT 1 FROM states WHERE id = $1 AND user_id = $2)", id, userID).Scan(&exists)
+	row := r.db.QueryRow(ctx, "SELECT EXISTS(SELECT 1 FROM states WHERE id = $1 AND user_id = $2)", id, userID)
+	err := row.Scan(&exists)
 	return exists, err
 }

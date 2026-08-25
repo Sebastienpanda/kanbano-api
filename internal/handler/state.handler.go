@@ -38,15 +38,10 @@ func (h *StateHandler) Create(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	if body.Name == "" {
-		http.Error(w, "body invalide", http.StatusBadRequest)
+		http.Error(w, "invalid request body", http.StatusBadRequest)
 		return
 	}
 
 	state, err := h.repo.Create(r.Context(), body.Name, body.Color, userID)
-	if err != nil {
-		serverError(w, err)
-		return
-	}
-
-	writeJSON(w, http.StatusCreated, state)
+	respondCreated(w, state, err)
 }

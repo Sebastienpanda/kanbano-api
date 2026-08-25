@@ -38,8 +38,6 @@ func NewTaskHandler(repo *repository.TaskRepository, workspaceRepo *repository.W
 	return &TaskHandler{repo: repo, workspaceRepo: workspaceRepo, columnRepo: columnRepo, stateRepo: stateRepo}
 }
 
-// resolveStateID détermine le state_id à appliquer : stateID s'il est fourni, sinon
-// stateName crée (ou récupère) le statut correspondant pour le user.
 func (h *TaskHandler) resolveStateID(w http.ResponseWriter, r *http.Request, userID uuid.UUID, stateID *uuid.UUID, stateName *string) (*uuid.UUID, bool) {
 	if stateID != nil {
 		exists, err := h.stateRepo.Exists(r.Context(), *stateID, userID)
@@ -48,7 +46,7 @@ func (h *TaskHandler) resolveStateID(w http.ResponseWriter, r *http.Request, use
 			return nil, false
 		}
 		if !exists {
-			http.Error(w, "statut introuvable", http.StatusNotFound)
+			http.Error(w, "state not found", http.StatusNotFound)
 			return nil, false
 		}
 		return stateID, true
@@ -67,23 +65,27 @@ func (h *TaskHandler) resolveStateID(w http.ResponseWriter, r *http.Request, use
 }
 
 func (h *TaskHandler) parseTaskContext(w http.ResponseWriter, r *http.Request) (userID, workspaceID, columnID uuid.UUID, ok bool) {
-	userID = userIDFromContext(r)
-
-	workspaceID, err := uuid.Parse(chi.URLParam(r, "id"))
-	if err != nil {
-		http.Error(w, "id invalide", http.StatusBadRequest)
+	userID, workspaceID, ok = requireWorkspace(w, r, h.workspaceRepo)
+	if !ok {
 		return
 	}
 
-	columnID, err = uuid.Parse(chi.URLParam(r, "columnId"))
+	columnID, err := uuid.Parse(chi.URLParam(r, "columnId"))
 	if err != nil {
-		http.Error(w, "columnId invalide", http.StatusBadRequest)
+		http.Error(w, "invalid columnId", http.StatusBadRequest)
+		ok = false
 		return
 	}
 
-	exists, err := h.workspaceRepo.Exists(r.Context(), workspaceID, userID)
-	if err != nil || !exists {
-		http.Error(w, "workspace introuvable", http.StatusNotFound)
+	colExists, err := h.columnRepo.Exists(r.Context(), columnID, workspaceID)
+	if err != nil {
+		serverError(w, err)
+		ok = false
+		return
+	}
+	if !colExists {
+		http.Error(w, "column not found", http.StatusNotFound)
+		ok = false
 		return
 	}
 
@@ -102,7 +104,7 @@ func (h *TaskHandler) Create(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	if body.Name == "" {
-		http.Error(w, "body invalide", http.StatusBadRequest)
+		http.Error(w, "invalid request body", http.StatusBadRequest)
 		return
 	}
 
@@ -112,12 +114,7 @@ func (h *TaskHandler) Create(w http.ResponseWriter, r *http.Request) {
 	}
 
 	task, err := h.repo.Create(r.Context(), body.Name, body.Description, columnID, stateID)
-	if err != nil {
-		serverError(w, err)
-		return
-	}
-
-	writeJSON(w, http.StatusCreated, task)
+	respondCreated(w, task, err)
 }
 
 func (h *TaskHandler) Update(w http.ResponseWriter, r *http.Request) {
@@ -142,15 +139,13 @@ func (h *TaskHandler) Update(w http.ResponseWriter, r *http.Request) {
 	}
 
 	task, err := h.repo.Update(r.Context(), taskID, columnID, body.Name, body.Description, stateID)
-	if handleRepoError(w, err, "tâche introuvable") {
+	if handleRepoError(w, err, "task not found") {
 		return
 	}
 
 	writeJSON(w, http.StatusOK, task)
 }
 
-// Reorder déplace une tâche à une nouvelle position, éventuellement vers une autre colonne
-// du même workspace (targetColumnId). Le back décale automatiquement les autres tâches.
 func (h *TaskHandler) Reorder(w http.ResponseWriter, r *http.Request) {
 	_, workspaceID, columnID, ok := h.parseTaskContext(w, r)
 	if !ok {
@@ -168,7 +163,7 @@ func (h *TaskHandler) Reorder(w http.ResponseWriter, r *http.Request) {
 	}
 
 	if body.TargetColumnID == nil && body.Position == nil {
-		http.Error(w, "position ou targetColumnId requis", http.StatusBadRequest)
+		http.Error(w, "position or targetColumnId required", http.StatusBadRequest)
 		return
 	}
 
@@ -179,13 +174,13 @@ func (h *TaskHandler) Reorder(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 		if !colExists {
-			http.Error(w, "colonne cible introuvable dans ce workspace", http.StatusNotFound)
+			http.Error(w, "target column not found in this workspace", http.StatusNotFound)
 			return
 		}
 	}
 
 	task, err := h.repo.Reorder(r.Context(), taskID, columnID, body.Position, body.TargetColumnID)
-	if handleRepoError(w, err, "tâche introuvable") {
+	if handleRepoError(w, err, "task not found") {
 		return
 	}
 
@@ -204,7 +199,7 @@ func (h *TaskHandler) Delete(w http.ResponseWriter, r *http.Request) {
 	}
 
 	task, err := h.repo.SoftDelete(r.Context(), taskID, columnID)
-	if handleRepoError(w, err, "tâche introuvable") {
+	if handleRepoError(w, err, "task not found") {
 		return
 	}
 

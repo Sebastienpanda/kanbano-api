@@ -41,9 +41,10 @@ func (r *ColumnRepository) ListNames(ctx context.Context, workspaceID uuid.UUID)
 
 func (r *ColumnRepository) Exists(ctx context.Context, id uuid.UUID, workspaceID uuid.UUID) (bool, error) {
 	var exists bool
-	err := r.db.QueryRow(ctx,
+	row := r.db.QueryRow(ctx,
 		"SELECT EXISTS(SELECT 1 FROM columns WHERE id = $1 AND workspace_id = $2 AND deleted_at IS NULL)",
-		id, workspaceID).Scan(&exists)
+		id, workspaceID)
+	err := row.Scan(&exists)
 	return exists, err
 }
 
@@ -61,8 +62,6 @@ func (r *ColumnRepository) Update(ctx context.Context, id uuid.UUID, workspaceID
 	return pgx.CollectOneRow(rows, pgx.RowToStructByName[models.Column])
 }
 
-// Reorder déplace une colonne à la position donnée et décale automatiquement
-// les autres colonnes du workspace pour combler l'écart et faire de la place.
 func (r *ColumnRepository) Reorder(ctx context.Context, id uuid.UUID, workspaceID uuid.UUID, position int) (models.Column, error) {
 	tx, err := r.db.Begin(ctx)
 	if err != nil {
@@ -71,23 +70,27 @@ func (r *ColumnRepository) Reorder(ctx context.Context, id uuid.UUID, workspaceI
 	defer tx.Rollback(ctx)
 
 	var oldPosition int
-	if err := tx.QueryRow(ctx,
+	row := tx.QueryRow(ctx,
 		"SELECT position FROM columns WHERE id = $1 AND workspace_id = $2 AND deleted_at IS NULL FOR UPDATE",
-		id, workspaceID).Scan(&oldPosition); err != nil {
+		id, workspaceID)
+	err = row.Scan(&oldPosition)
+	if err != nil {
 		return models.Column{}, err
 	}
 
 	if position != oldPosition {
 		if position < oldPosition {
-			if _, err := tx.Exec(ctx,
+			_, err = tx.Exec(ctx,
 				"UPDATE columns SET position = position + 1, updated_at = NOW() WHERE workspace_id = $1 AND id != $2 AND position >= $3 AND position < $4 AND deleted_at IS NULL",
-				workspaceID, id, position, oldPosition); err != nil {
+				workspaceID, id, position, oldPosition)
+			if err != nil {
 				return models.Column{}, err
 			}
 		} else {
-			if _, err := tx.Exec(ctx,
+			_, err = tx.Exec(ctx,
 				"UPDATE columns SET position = position - 1, updated_at = NOW() WHERE workspace_id = $1 AND id != $2 AND position > $3 AND position <= $4 AND deleted_at IS NULL",
-				workspaceID, id, oldPosition, position); err != nil {
+				workspaceID, id, oldPosition, position)
+			if err != nil {
 				return models.Column{}, err
 			}
 		}
@@ -108,7 +111,8 @@ func (r *ColumnRepository) Reorder(ctx context.Context, id uuid.UUID, workspaceI
 		return models.Column{}, err
 	}
 
-	if err := tx.Commit(ctx); err != nil {
+	err = tx.Commit(ctx)
+	if err != nil {
 		return models.Column{}, err
 	}
 
@@ -136,14 +140,16 @@ func (r *ColumnRepository) SoftDelete(ctx context.Context, id uuid.UUID, workspa
 		return models.Column{}, err
 	}
 
-	if _, err := tx.Exec(ctx, `
+	_, err = tx.Exec(ctx, `
 		UPDATE tasks SET deleted_at = NOW()
 		WHERE column_id = $1 AND deleted_at IS NULL
-	`, id); err != nil {
+	`, id)
+	if err != nil {
 		return models.Column{}, err
 	}
 
-	if err := tx.Commit(ctx); err != nil {
+	err = tx.Commit(ctx)
+	if err != nil {
 		return models.Column{}, err
 	}
 
