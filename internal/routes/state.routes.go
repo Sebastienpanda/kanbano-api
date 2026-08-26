@@ -14,5 +14,6 @@ func StatesRoutes(r chi.Router, wh *handler.StateHandler) {
 
 		r.Get("/", wh.List)
 		r.Post("/", wh.Create)
+		r.Patch("/{id}", wh.Update)
 	})
 }
