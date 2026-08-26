@@ -24,15 +24,15 @@ type WorkspaceName struct {
 type WorkspaceDetail struct {
 	Workspace
 	Columns []ColumnWithTasks `json:"columns"`
-	States  []StateName       `json:"states"`
+	Tags    []TagName         `json:"tags"`
 }
 
 type ColumnWithTasks struct {
 	Column
-	Tasks []TaskWithState `json:"tasks"`
+	Tasks []TaskWithTag `json:"tasks"`
 }
 
-type TaskWithState struct {
+type TaskWithTag struct {
 	Task
-	State *StateName `json:"state"`
+	Tag *TagName `json:"tag"`
 }

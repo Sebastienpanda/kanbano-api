@@ -16,22 +16,41 @@ type TaskHandler struct {
 	repo          *repository.TaskRepository
 	workspaceRepo *repository.WorkspaceRepository
 	columnRepo    *repository.ColumnRepository
-	stateRepo     *repository.StateRepository
+	tagRepo       *repository.TagRepository
 	hub           *ws.Hub
 }
 
 type createTaskBody struct {
 	Name        string     `json:"name"`
 	Description *string    `json:"description"`
-	StateID     *uuid.UUID `json:"state_id"`
-	StateName   *string    `json:"state_name"`
+	TagID       *uuid.UUID `json:"tag_id"`
+	TagName     *string    `json:"tag_name"`
+	Status      *string    `json:"status"`
 }
 
 type updateTaskBody struct {
 	Name        *string    `json:"name"`
 	Description *string    `json:"description"`
-	StateID     *uuid.UUID `json:"state_id"`
-	StateName   *string    `json:"state_name"`
+	TagID       *uuid.UUID `json:"tag_id"`
+	TagName     *string    `json:"tag_name"`
+	Status      *string    `json:"status"`
+}
+
+var validTaskStatuses = map[string]bool{
+	"À faire":  true,
+	"En cours": true,
+	"Terminé":  true,
+}
+
+func validateStatus(w http.ResponseWriter, status *string) bool {
+	if status == nil || *status == "" {
+		return true
+	}
+	if !validTaskStatuses[*status] {
+		http.Error(w, "invalid status", http.StatusBadRequest)
+		return false
+	}
+	return true
 }
 
 type reorderTaskBody struct {
@@ -39,47 +58,47 @@ type reorderTaskBody struct {
 	TargetColumnID *uuid.UUID `json:"targetColumnId"`
 }
 
-func NewTaskHandler(repo *repository.TaskRepository, workspaceRepo *repository.WorkspaceRepository, columnRepo *repository.ColumnRepository, stateRepo *repository.StateRepository, hub *ws.Hub) *TaskHandler {
-	return &TaskHandler{repo: repo, workspaceRepo: workspaceRepo, columnRepo: columnRepo, stateRepo: stateRepo, hub: hub}
+func NewTaskHandler(repo *repository.TaskRepository, workspaceRepo *repository.WorkspaceRepository, columnRepo *repository.ColumnRepository, tagRepo *repository.TagRepository, hub *ws.Hub) *TaskHandler {
+	return &TaskHandler{repo: repo, workspaceRepo: workspaceRepo, columnRepo: columnRepo, tagRepo: tagRepo, hub: hub}
 }
 
-func (h *TaskHandler) resolveStateID(w http.ResponseWriter, r *http.Request, userID uuid.UUID, stateID *uuid.UUID, stateName *string) (*uuid.UUID, bool) {
-	if stateID != nil {
-		exists, err := h.stateRepo.Exists(r.Context(), *stateID, userID)
+func (h *TaskHandler) resolveTagID(w http.ResponseWriter, r *http.Request, userID uuid.UUID, tagID *uuid.UUID, tagName *string) (*uuid.UUID, bool) {
+	if tagID != nil {
+		exists, err := h.tagRepo.Exists(r.Context(), *tagID, userID)
 		if err != nil {
 			serverError(w, err)
 			return nil, false
 		}
 		if !exists {
-			http.Error(w, "state not found", http.StatusNotFound)
+			http.Error(w, "tag not found", http.StatusNotFound)
 			return nil, false
 		}
-		return stateID, true
+		return tagID, true
 	}
 
-	if stateName != nil && *stateName != "" {
-		state, err := h.stateRepo.GetOrCreate(r.Context(), userID, *stateName)
+	if tagName != nil && *tagName != "" {
+		tag, err := h.tagRepo.GetOrCreate(r.Context(), userID, *tagName)
 		if err != nil {
 			serverError(w, err)
 			return nil, false
 		}
-		return &state.ID, true
+		return &tag.ID, true
 	}
 
 	return nil, true
 }
 
 func (h *TaskHandler) broadcastTask(ctx context.Context, userID, workspaceID uuid.UUID, eventType ws.EventType, task models.Task) {
-	taskWithState := models.TaskWithState{Task: task}
-	if task.StateID != nil {
-		state, err := h.stateRepo.GetByID(ctx, *task.StateID)
+	taskWithTag := models.TaskWithTag{Task: task}
+	if task.TagID != nil {
+		tag, err := h.tagRepo.GetByID(ctx, *task.TagID)
 		if err != nil {
-			log.Printf("failed to load state for task broadcast: %v", err)
+			log.Printf("failed to load tag for task broadcast: %v", err)
 		} else {
-			taskWithState.State = &state
+			taskWithTag.Tag = &tag
 		}
 	}
-	h.hub.Broadcast(userID, ws.Event{Type: eventType, WorkspaceID: workspaceID, Data: taskWithState})
+	h.hub.Broadcast(userID, ws.Event{Type: eventType, WorkspaceID: workspaceID, Data: taskWithTag})
 }
 
 func (h *TaskHandler) parseTaskContext(w http.ResponseWriter, r *http.Request) (userID, workspaceID, columnID uuid.UUID, ok bool) {
@@ -125,13 +144,16 @@ func (h *TaskHandler) Create(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "invalid request body", http.StatusBadRequest)
 		return
 	}
+	if !validateStatus(w, body.Status) {
+		return
+	}
 
-	stateID, ok := h.resolveStateID(w, r, userID, body.StateID, body.StateName)
+	tagID, ok := h.resolveTagID(w, r, userID, body.TagID, body.TagName)
 	if !ok {
 		return
 	}
 
-	task, err := h.repo.Create(r.Context(), body.Name, body.Description, columnID, stateID)
+	task, err := h.repo.Create(r.Context(), body.Name, body.Description, columnID, tagID, body.Status)
 	if err == nil {
 		h.broadcastTask(r.Context(), userID, workspaceID, ws.TaskCreated, task)
 	}
@@ -153,13 +175,16 @@ func (h *TaskHandler) Update(w http.ResponseWriter, r *http.Request) {
 	if !ok {
 		return
 	}
+	if !validateStatus(w, body.Status) {
+		return
+	}
 
-	stateID, ok := h.resolveStateID(w, r, userID, body.StateID, body.StateName)
+	tagID, ok := h.resolveTagID(w, r, userID, body.TagID, body.TagName)
 	if !ok {
 		return
 	}
 
-	task, err := h.repo.Update(r.Context(), taskID, columnID, body.Name, body.Description, stateID)
+	task, err := h.repo.Update(r.Context(), taskID, columnID, body.Name, body.Description, tagID, body.Status)
 	if handleRepoError(w, err, "task not found") {
 		return
 	}
@@ -169,7 +194,7 @@ func (h *TaskHandler) Update(w http.ResponseWriter, r *http.Request) {
 }
 
 func (h *TaskHandler) Reorder(w http.ResponseWriter, r *http.Request) {
-	userID, workspaceID, columnID, ok := h.parseTaskContext(w, r)
+	_, workspaceID, columnID, ok := h.parseTaskContext(w, r)
 	if !ok {
 		return
 	}
@@ -206,7 +231,6 @@ func (h *TaskHandler) Reorder(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	h.broadcastTask(r.Context(), userID, workspaceID, ws.TaskUpdated, task)
 	writeJSON(w, http.StatusOK, task)
 }
 

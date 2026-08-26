@@ -129,26 +129,26 @@ func (r *WorkspaceRepository) GetByID(ctx context.Context, id uuid.UUID, userID 
 			c.workspace_id, 
 			c.created_at, 
 			c.updated_at,
-			t.id, 
-			t.name, 
-			t.description, 
-			t.position, 
-			t.column_id, 
-			t.state_id, 
-			t.created_at, 
+			t.id,
+			t.name,
+			t.description,
+			t.position,
+			t.column_id,
+			t.tag_id,
+			t.created_at,
 			t.updated_at,
-			s.id, 
-			s.name, 
-			s.color
+			g.id,
+			g.name,
+			g.color
 		FROM workspaces w
-		LEFT JOIN columns c 
-		    ON c.workspace_id = w.id 
+		LEFT JOIN columns c
+		    ON c.workspace_id = w.id
 		           AND c.deleted_at IS NULL
-		LEFT JOIN tasks t 
-		    ON t.column_id = c.id 
+		LEFT JOIN tasks t
+		    ON t.column_id = c.id
 		           AND t.deleted_at IS NULL
-		LEFT JOIN states s 
-		    ON s.id = t.state_id
+		LEFT JOIN tags g
+		    ON g.id = t.tag_id
 		WHERE w.id = $1 
 		  AND w.user_id = $2 
 		  AND w.deleted_at IS NULL
@@ -184,18 +184,18 @@ func (r *WorkspaceRepository) GetByID(ctx context.Context, id uuid.UUID, userID 
 			taskName                   *string
 			taskDesc                   *string
 			taskPos                    *int
-			taskStateID                *uuid.UUID
+			taskTagID                  *uuid.UUID
 			taskCreatedAt, taskUpdAt   *time.Time
-			stateID                    *uuid.UUID
-			stateName                  *string
-			stateColor                 *string
+			tagID                      *uuid.UUID
+			tagName                    *string
+			tagColor                   *string
 		)
 
 		err := rows.Scan(
 			&wsID, &wsName, &wsDesc, &wsUserID, &wsCreatedAt, &wsUpdatedAt,
 			&colID, &colName, &colPos, &colWsID, &colCreatedAt, &colUpdatedAt,
-			&taskID, &taskName, &taskDesc, &taskPos, &taskColID, &taskStateID, &taskCreatedAt, &taskUpdAt,
-			&stateID, &stateName, &stateColor,
+			&taskID, &taskName, &taskDesc, &taskPos, &taskColID, &taskTagID, &taskCreatedAt, &taskUpdAt,
+			&tagID, &tagName, &tagColor,
 		)
 		if err != nil {
 			return models.WorkspaceDetail{}, err
@@ -227,27 +227,27 @@ func (r *WorkspaceRepository) GetByID(ctx context.Context, id uuid.UUID, userID 
 					CreatedAt:   derefTime(colCreatedAt),
 					UpdatedAt:   derefTime(colUpdatedAt),
 				},
-				Tasks: []models.TaskWithState{},
+				Tasks: []models.TaskWithTag{},
 			}
 			columnsMap[*colID] = &col
 			columnOrder = append(columnOrder, *colID)
 		}
 
 		if taskID != nil {
-			task := models.TaskWithState{
+			task := models.TaskWithTag{
 				Task: models.Task{
 					ID:          *taskID,
 					Name:        derefStr(taskName),
 					Description: taskDesc,
 					Position:    derefInt(taskPos),
 					ColumnID:    derefUUID(taskColID),
-					StateID:     taskStateID,
+					TagID:       taskTagID,
 					CreatedAt:   derefTime(taskCreatedAt),
 					UpdatedAt:   derefTime(taskUpdAt),
 				},
 			}
-			if stateID != nil {
-				task.State = &models.StateName{ID: *stateID, Name: derefStr(stateName), Color: stateColor}
+			if tagID != nil {
+				task.Tag = &models.TagName{ID: *tagID, Name: derefStr(tagName), Color: tagColor}
 			}
 			columnsMap[*colID].Tasks = append(columnsMap[*colID].Tasks, task)
 		}
@@ -268,11 +268,11 @@ func (r *WorkspaceRepository) GetByID(ctx context.Context, id uuid.UUID, userID 
 		detail.Columns = append(detail.Columns, *columnsMap[colID])
 	}
 
-	stateRows, err := r.db.Query(ctx, `
-		SELECT id, 
-		       name, 
+	tagRows, err := r.db.Query(ctx, `
+		SELECT id,
+		       name,
 		       color
-		FROM states
+		FROM tags
 		WHERE user_id = $1
 		ORDER BY name
 		`,
@@ -280,7 +280,7 @@ func (r *WorkspaceRepository) GetByID(ctx context.Context, id uuid.UUID, userID 
 	if err != nil {
 		return models.WorkspaceDetail{}, err
 	}
-	detail.States, err = pgx.CollectRows(stateRows, pgx.RowToStructByName[models.StateName])
+	detail.Tags, err = pgx.CollectRows(tagRows, pgx.RowToStructByName[models.TagName])
 	if err != nil {
 		return models.WorkspaceDetail{}, err
 	}
