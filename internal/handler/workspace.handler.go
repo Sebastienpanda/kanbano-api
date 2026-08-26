@@ -1,12 +1,18 @@
 package handler
 
 import (
+	"context"
 	"kanbano-api/internal/repository"
+	"kanbano-api/internal/ws"
+	"log"
 	"net/http"
+
+	"github.com/google/uuid"
 )
 
 type WorkspaceHandler struct {
 	repo *repository.WorkspaceRepository
+	hub  *ws.Hub
 }
 
 type createWorkspaceBody struct {
@@ -19,8 +25,8 @@ type updateWorkspaceBody struct {
 	Description *string `json:"description"`
 }
 
-func NewWorkspaceHandler(repo *repository.WorkspaceRepository) *WorkspaceHandler {
-	return &WorkspaceHandler{repo: repo}
+func NewWorkspaceHandler(repo *repository.WorkspaceRepository, hub *ws.Hub) *WorkspaceHandler {
+	return &WorkspaceHandler{repo: repo, hub: hub}
 }
 
 func (h *WorkspaceHandler) List(w http.ResponseWriter, r *http.Request) {
@@ -59,6 +65,15 @@ func (h *WorkspaceHandler) Names(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusOK, names)
 }
 
+func (h *WorkspaceHandler) recentOrNil(ctx context.Context, userID uuid.UUID) any {
+	recent, err := h.repo.ListRecent(ctx, userID)
+	if err != nil {
+		log.Printf("failed to load recent workspaces for broadcast: %v", err)
+		return nil
+	}
+	return recent
+}
+
 func (h *WorkspaceHandler) Create(w http.ResponseWriter, r *http.Request) {
 	userID := userIDFromContext(r)
 
@@ -72,6 +87,12 @@ func (h *WorkspaceHandler) Create(w http.ResponseWriter, r *http.Request) {
 	}
 
 	workspace, err := h.repo.Create(r.Context(), body.Name, body.Description, userID)
+	if err == nil {
+		h.hub.Broadcast(userID, ws.Event{
+			Type:   ws.WorkspaceCreated,
+			Recent: h.recentOrNil(r.Context(), userID),
+		})
+	}
 	respondCreated(w, workspace, err)
 }
 
@@ -109,6 +130,7 @@ func (h *WorkspaceHandler) Update(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	h.hub.Broadcast(userID, ws.Event{Type: ws.WorkspaceUpdated, WorkspaceID: workspace.ID, Data: workspace})
 	writeJSON(w, http.StatusOK, workspace)
 }
 
@@ -125,5 +147,9 @@ func (h *WorkspaceHandler) Delete(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	h.hub.Broadcast(userID, ws.Event{
+		Type:        ws.WorkspaceDeleted,
+		WorkspaceID: workspace.ID,
+	})
 	writeJSON(w, http.StatusOK, workspace)
 }

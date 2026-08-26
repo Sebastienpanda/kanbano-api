@@ -8,6 +8,7 @@ import (
 	"os"
 
 	appMiddleware "kanbano-api/internal/middleware"
+	"kanbano-api/internal/ws"
 
 	"github.com/go-chi/chi/v5"
 	"github.com/go-chi/chi/v5/middleware"
@@ -38,11 +39,14 @@ func main() {
 	}
 	log.Println("JWKS initialized successfully")
 
+	allowedOrigins := []string{"http://localhost:4200", "https://kanban.kanbano.fr"}
+	ws.SetAllowedOrigins(allowedOrigins)
+
 	r := chi.NewRouter()
 	r.Use(middleware.Logger)
 	r.Use(middleware.Recoverer)
 	r.Use(cors.Handler(cors.Options{
-		AllowedOrigins: []string{"http://localhost:4200", "https://kanban.kanbano.fr"},
+		AllowedOrigins: allowedOrigins,
 		AllowedMethods: []string{"GET", "POST", "PATCH", "DELETE"},
 		AllowedHeaders: []string{"Accept", "Authorization", "Content-Type"},
 	}))

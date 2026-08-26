@@ -1,7 +1,11 @@
 package handler
 
 import (
+	"context"
+	"kanbano-api/internal/models"
 	"kanbano-api/internal/repository"
+	"kanbano-api/internal/ws"
+	"log"
 	"net/http"
 
 	"github.com/go-chi/chi/v5"
@@ -13,6 +17,7 @@ type TaskHandler struct {
 	workspaceRepo *repository.WorkspaceRepository
 	columnRepo    *repository.ColumnRepository
 	stateRepo     *repository.StateRepository
+	hub           *ws.Hub
 }
 
 type createTaskBody struct {
@@ -34,8 +39,8 @@ type reorderTaskBody struct {
 	TargetColumnID *uuid.UUID `json:"targetColumnId"`
 }
 
-func NewTaskHandler(repo *repository.TaskRepository, workspaceRepo *repository.WorkspaceRepository, columnRepo *repository.ColumnRepository, stateRepo *repository.StateRepository) *TaskHandler {
-	return &TaskHandler{repo: repo, workspaceRepo: workspaceRepo, columnRepo: columnRepo, stateRepo: stateRepo}
+func NewTaskHandler(repo *repository.TaskRepository, workspaceRepo *repository.WorkspaceRepository, columnRepo *repository.ColumnRepository, stateRepo *repository.StateRepository, hub *ws.Hub) *TaskHandler {
+	return &TaskHandler{repo: repo, workspaceRepo: workspaceRepo, columnRepo: columnRepo, stateRepo: stateRepo, hub: hub}
 }
 
 func (h *TaskHandler) resolveStateID(w http.ResponseWriter, r *http.Request, userID uuid.UUID, stateID *uuid.UUID, stateName *string) (*uuid.UUID, bool) {
@@ -62,6 +67,19 @@ func (h *TaskHandler) resolveStateID(w http.ResponseWriter, r *http.Request, use
 	}
 
 	return nil, true
+}
+
+func (h *TaskHandler) broadcastTask(ctx context.Context, userID, workspaceID uuid.UUID, eventType ws.EventType, task models.Task) {
+	taskWithState := models.TaskWithState{Task: task}
+	if task.StateID != nil {
+		state, err := h.stateRepo.GetByID(ctx, *task.StateID)
+		if err != nil {
+			log.Printf("failed to load state for task broadcast: %v", err)
+		} else {
+			taskWithState.State = &state
+		}
+	}
+	h.hub.Broadcast(userID, ws.Event{Type: eventType, WorkspaceID: workspaceID, Data: taskWithState})
 }
 
 func (h *TaskHandler) parseTaskContext(w http.ResponseWriter, r *http.Request) (userID, workspaceID, columnID uuid.UUID, ok bool) {
@@ -94,7 +112,7 @@ func (h *TaskHandler) parseTaskContext(w http.ResponseWriter, r *http.Request) (
 }
 
 func (h *TaskHandler) Create(w http.ResponseWriter, r *http.Request) {
-	userID, _, columnID, ok := h.parseTaskContext(w, r)
+	userID, workspaceID, columnID, ok := h.parseTaskContext(w, r)
 	if !ok {
 		return
 	}
@@ -114,11 +132,14 @@ func (h *TaskHandler) Create(w http.ResponseWriter, r *http.Request) {
 	}
 
 	task, err := h.repo.Create(r.Context(), body.Name, body.Description, columnID, stateID)
+	if err == nil {
+		h.broadcastTask(r.Context(), userID, workspaceID, ws.TaskCreated, task)
+	}
 	respondCreated(w, task, err)
 }
 
 func (h *TaskHandler) Update(w http.ResponseWriter, r *http.Request) {
-	userID, _, columnID, ok := h.parseTaskContext(w, r)
+	userID, workspaceID, columnID, ok := h.parseTaskContext(w, r)
 	if !ok {
 		return
 	}
@@ -143,11 +164,12 @@ func (h *TaskHandler) Update(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	h.broadcastTask(r.Context(), userID, workspaceID, ws.TaskUpdated, task)
 	writeJSON(w, http.StatusOK, task)
 }
 
 func (h *TaskHandler) Reorder(w http.ResponseWriter, r *http.Request) {
-	_, workspaceID, columnID, ok := h.parseTaskContext(w, r)
+	userID, workspaceID, columnID, ok := h.parseTaskContext(w, r)
 	if !ok {
 		return
 	}
@@ -184,11 +206,12 @@ func (h *TaskHandler) Reorder(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	h.broadcastTask(r.Context(), userID, workspaceID, ws.TaskUpdated, task)
 	writeJSON(w, http.StatusOK, task)
 }
 
 func (h *TaskHandler) Delete(w http.ResponseWriter, r *http.Request) {
-	_, _, columnID, ok := h.parseTaskContext(w, r)
+	userID, workspaceID, columnID, ok := h.parseTaskContext(w, r)
 	if !ok {
 		return
 	}
@@ -202,6 +225,8 @@ func (h *TaskHandler) Delete(w http.ResponseWriter, r *http.Request) {
 	if handleRepoError(w, err, "task not found") {
 		return
 	}
+
+	h.broadcastTask(r.Context(), userID, workspaceID, ws.TaskDeleted, task)
 
 	writeJSON(w, http.StatusOK, task)
 }

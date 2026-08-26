@@ -14,6 +14,11 @@ type createStateBody struct {
 	Color *string `json:"color"`
 }
 
+type updateStateBody struct {
+	Name  *string `json:"name"`
+	Color *string `json:"color"`
+}
+
 func NewStateHandler(repo *repository.StateRepository) *StateHandler {
 	return &StateHandler{repo: repo}
 }
@@ -44,4 +49,25 @@ func (h *StateHandler) Create(w http.ResponseWriter, r *http.Request) {
 
 	state, err := h.repo.Create(r.Context(), body.Name, body.Color, userID)
 	respondCreated(w, state, err)
+}
+
+func (h *StateHandler) Update(w http.ResponseWriter, r *http.Request) {
+	userID := userIDFromContext(r)
+
+	stateID, ok := parseUUIDParam(w, r, "id")
+	if !ok {
+		return
+	}
+
+	body, ok := decodeJSON[updateStateBody](w, r)
+	if !ok {
+		return
+	}
+
+	state, err := h.repo.Update(r.Context(), stateID, userID, body.Name, body.Color)
+	if handleRepoError(w, err, "state not found") {
+		return
+	}
+
+	writeJSON(w, http.StatusOK, state)
 }
