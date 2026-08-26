@@ -17,35 +17,38 @@ func NewTaskRepository(db *pgxpool.Pool) *TaskRepository {
 	return &TaskRepository{db: db}
 }
 
-func (r *TaskRepository) Create(ctx context.Context, name string, description *string, columnID uuid.UUID, stateID *uuid.UUID) (models.Task, error) {
+func (r *TaskRepository) Create(ctx context.Context, name string, description *string, columnID uuid.UUID, tagID *uuid.UUID, status *string) (models.Task, error) {
 	rows, err := r.db.Query(ctx, `
-		INSERT INTO tasks (name, description, column_id, state_id, position)
-		VALUES ($1, $2, $3, $4, (SELECT COALESCE(MAX(position) + 1, 0) FROM tasks WHERE column_id = $3))
-		RETURNING id, name, description, position, column_id, state_id, created_at, updated_at, deleted_at
+		INSERT INTO tasks (name, description, column_id, tag_id, status, position)
+		VALUES ($1, $2, $3, $4, $5, (SELECT COALESCE(MAX(position) + 1, 0) FROM tasks WHERE column_id = $3))
+		RETURNING id, name, description, position, column_id, tag_id, status, created_at, updated_at, deleted_at
 		`,
 		name,
 		description,
 		columnID,
-		stateID)
+		tagID,
+		status)
 	if err != nil {
 		return models.Task{}, err
 	}
 	return pgx.CollectOneRow(rows, pgx.RowToStructByName[models.Task])
 }
 
-func (r *TaskRepository) Update(ctx context.Context, id uuid.UUID, columnID uuid.UUID, name *string, description *string, stateID *uuid.UUID) (models.Task, error) {
+func (r *TaskRepository) Update(ctx context.Context, id uuid.UUID, columnID uuid.UUID, name *string, description *string, tagID *uuid.UUID, status *string) (models.Task, error) {
 	rows, err := r.db.Query(ctx, `
 		UPDATE tasks
 		SET name        = COALESCE($1, name),
 		    description = COALESCE($2, description),
-		    state_id    = COALESCE($3, state_id),
+		    tag_id      = COALESCE($3, tag_id),
+		    status      = COALESCE($4, status),
 		    updated_at  = NOW()
-		WHERE id = $4 AND column_id = $5 AND deleted_at IS NULL
-		RETURNING id, name, description, position, column_id, state_id, created_at, updated_at, deleted_at
+		WHERE id = $5 AND column_id = $6 AND deleted_at IS NULL
+		RETURNING id, name, description, position, column_id, tag_id, status, created_at, updated_at, deleted_at
 		`,
 		name,
 		description,
-		stateID,
+		tagID,
+		status,
 		id,
 		columnID)
 	if err != nil {
@@ -173,7 +176,7 @@ func (r *TaskRepository) Reorder(ctx context.Context, id uuid.UUID, columnID uui
 		    updated_at = NOW()
 		WHERE id = $3
 		  AND deleted_at IS NULL
-		RETURNING id, name, description, position, column_id, state_id, created_at, updated_at, deleted_at
+		RETURNING id, name, description, position, column_id, tag_id, status, created_at, updated_at, deleted_at
 		`,
 		newPosition,
 		targetColumnID,
@@ -201,7 +204,7 @@ func (r *TaskRepository) SoftDelete(ctx context.Context, id uuid.UUID, columnID 
 		WHERE id = $1
 		  AND column_id = $2
 		  AND deleted_at IS NULL
-		RETURNING id, name, description, position, column_id, state_id, created_at, updated_at, deleted_at
+		RETURNING id, name, description, position, column_id, tag_id, status, created_at, updated_at, deleted_at
 		`,
 		id,
 		columnID)

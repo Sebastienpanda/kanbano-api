@@ -1,0 +1,22 @@
+#!/usr/bin/env bash
+# Valide que le message de commit respecte la convention Conventional Commits.
+# Equivalent Go de commitlint (husky) cote frontend.
+
+commit_msg_file="$1"
+commit_msg=$(head -n1 "$commit_msg_file")
+
+pattern="^(feat|fix|docs|style|refactor|perf|test|build|ci|chore|revert)(\([a-z0-9_-]+\))?!?: .{1,}"
+
+if ! [[ "$commit_msg" =~ $pattern ]]; then
+    echo "Commit rejete : le message ne respecte pas la convention Conventional Commits."
+    echo ""
+    echo "Format attendu : <type>(<scope optionnel>): <description>"
+    echo "Types autorises : feat, fix, docs, style, refactor, perf, test, build, ci, chore, revert"
+    echo ""
+    echo "Exemples :"
+    echo "  feat(task): ajouter le renommage du statut"
+    echo "  fix(auth): corriger la validation du token JWT"
+    echo ""
+    echo "Message recu : \"$commit_msg\""
+    exit 1
+fi

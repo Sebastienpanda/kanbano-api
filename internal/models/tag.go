@@ -6,13 +6,13 @@ import (
 	"github.com/google/uuid"
 )
 
-type StateName struct {
+type TagName struct {
 	ID    uuid.UUID `json:"id"`
 	Name  string    `json:"name"`
 	Color *string   `json:"color"`
 }
 
-type State struct {
+type Tag struct {
 	ID        uuid.UUID `json:"id"`
 	Name      string    `json:"name"`
 	Color     *string   `json:"color"`

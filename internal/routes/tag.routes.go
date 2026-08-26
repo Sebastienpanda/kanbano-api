@@ -7,9 +7,9 @@ import (
 	"github.com/go-chi/chi/v5"
 )
 
-func StatesRoutes(r chi.Router, wh *handler.StateHandler) {
+func TagsRoutes(r chi.Router, wh *handler.TagHandler) {
 
-	r.Route("/states", func(r chi.Router) {
+	r.Route("/tags", func(r chi.Router) {
 		r.Use(middleware.AuthRequired)
 
 		r.Get("/", wh.List)

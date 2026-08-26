@@ -12,3 +12,6 @@ migrate-status:
 
 migrate-create:
 	migrate create -ext sql -dir internal/db/migrations -seq $(name)
+
+install-hooks:
+	git config core.hooksPath .githooks
