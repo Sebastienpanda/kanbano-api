@@ -89,8 +89,10 @@ func (h *WorkspaceHandler) Create(w http.ResponseWriter, r *http.Request) {
 	workspace, err := h.repo.Create(r.Context(), body.Name, body.Description, userID)
 	if err == nil {
 		h.hub.Broadcast(userID, ws.Event{
-			Type:   ws.WorkspaceCreated,
-			Recent: h.recentOrNil(r.Context(), userID),
+			Type:        ws.WorkspaceCreated,
+			WorkspaceID: workspace.ID,
+			Data:        workspace,
+			Recent:      h.recentOrNil(r.Context(), userID),
 		})
 	}
 	respondCreated(w, workspace, err)

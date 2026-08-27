@@ -18,6 +18,9 @@ const (
 	ColumnCreated    EventType = "column.created"
 	ColumnUpdated    EventType = "column.updated"
 	ColumnDeleted    EventType = "column.deleted"
+	UserUpdated      EventType = "user.updated"
+	AvatarUpdated    EventType = "avatar.updated"
+	AvatarDeleted    EventType = "avatar.deleted"
 )
 
 type Event struct {
