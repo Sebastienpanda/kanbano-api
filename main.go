@@ -3,9 +3,11 @@ package main
 import (
 	"context"
 	"kanbano-api/internal/routes"
+	"kanbano-api/internal/storage"
 	"log"
 	"net/http"
 	"os"
+	"strconv"
 
 	appMiddleware "kanbano-api/internal/middleware"
 	"kanbano-api/internal/ws"
@@ -39,6 +41,23 @@ func main() {
 	}
 	log.Println("JWKS initialized successfully")
 
+	useSSL, _ := strconv.ParseBool(os.Getenv("GARAGE_USE_SSL"))
+	store, err := storage.New(context.Background(), storage.Config{
+		Endpoint:      os.Getenv("GARAGE_ENDPOINT"),
+		Region:        os.Getenv("GARAGE_REGION"),
+		AccessKey:     os.Getenv("GARAGE_ACCESS_KEY"),
+		SecretKey:     os.Getenv("GARAGE_SECRET_KEY"),
+		Bucket:        os.Getenv("GARAGE_BUCKET"),
+		PublicBaseURL: os.Getenv("GARAGE_PUBLIC_BASE_URL"),
+		UseSSL:        useSSL,
+	})
+	if err != nil {
+		log.Printf("object storage unavailable, avatar endpoints disabled: %v", err)
+		store = nil
+	} else {
+		log.Println("object storage connected")
+	}
+
 	allowedOrigins := []string{"http://localhost:4200", "https://kanban.kanbano.fr"}
 	ws.SetAllowedOrigins(allowedOrigins)
 
@@ -47,11 +66,11 @@ func main() {
 	r.Use(middleware.Recoverer)
 	r.Use(cors.Handler(cors.Options{
 		AllowedOrigins: allowedOrigins,
-		AllowedMethods: []string{"GET", "POST", "PATCH", "DELETE"},
+		AllowedMethods: []string{"GET", "POST", "PATCH", "PUT", "DELETE"},
 		AllowedHeaders: []string{"Accept", "Authorization", "Content-Type"},
 	}))
 
-	routes.RegisterRoutes(r, pool)
+	routes.RegisterRoutes(r, pool, store)
 
 	log.Println("server listening on port 3000")
 
