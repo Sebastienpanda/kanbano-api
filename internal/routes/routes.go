@@ -5,6 +5,7 @@ import (
 	"kanbano-api/internal/repository"
 	"kanbano-api/internal/storage"
 	"kanbano-api/internal/ws"
+	"os"
 
 	"github.com/go-chi/chi/v5"
 	"github.com/jackc/pgx/v5/pgxpool"
@@ -25,11 +26,13 @@ func RegisterRoutes(r *chi.Mux, pool *pgxpool.Pool, store *storage.Client) {
 	tagHandler := handler.NewTagHandler(tagRepo)
 	userHandler := handler.NewUserHandler(userRepo, store, hub)
 	wsHandler := handler.NewWSHandler(hub)
+	brevoHandler := handler.NewBrevoHandler(os.Getenv("BREVO_WEBHOOK_SECRET"), os.Getenv("DISCORD_WEBHOOK_URL"))
 
 	r.Route("/api/v1", func(r chi.Router) {
 		WorkspacesRoutes(r, workspaceHandler, columnHandler, taskHandler)
 		TagsRoutes(r, tagHandler)
 		UsersRoutes(r, userHandler)
+		BrevoRoutes(r, brevoHandler)
 
 		r.Get("/ws", wsHandler.Serve)
 	})
