@@ -21,6 +21,12 @@ type WorkspaceName struct {
 	Name string    `json:"name"`
 }
 
+type WorkspaceSearchResult struct {
+	ID          uuid.UUID `json:"id"`
+	Name        string    `json:"name"`
+	Description *string   `json:"description"`
+}
+
 type WorkspaceDetail struct {
 	Workspace
 	Columns []ColumnWithTasks `json:"columns"`

@@ -31,7 +31,7 @@ func (r *WorkspaceRepository) List(ctx context.Context, userID uuid.UUID) ([]mod
 		FROM workspaces
 		WHERE user_id = $1
 		  AND deleted_at IS NULL
-		ORDER BY created_at DESC
+		ORDER BY COALESCE(updated_at, created_at) DESC
 		`,
 		userID)
 	if err != nil {
@@ -53,7 +53,7 @@ func (r *WorkspaceRepository) ListRecent(ctx context.Context, userID uuid.UUID) 
 		FROM workspaces
 		WHERE user_id = $1
 		  AND deleted_at IS NULL
-		ORDER BY created_at DESC
+		ORDER BY COALESCE(updated_at, created_at) DESC
 		LIMIT 6
 		`,
 		userID)
@@ -71,13 +71,33 @@ func (r *WorkspaceRepository) ListNames(ctx context.Context, userID uuid.UUID) (
 		FROM workspaces
 		WHERE user_id = $1
 		  AND deleted_at IS NULL
-		ORDER BY created_at DESC
+		ORDER BY COALESCE(updated_at, created_at) DESC
 		`,
 		userID)
 	if err != nil {
 		return nil, err
 	}
 	return pgx.CollectRows(rows, pgx.RowToStructByName[models.WorkspaceName])
+}
+
+func (r *WorkspaceRepository) Search(ctx context.Context, userID uuid.UUID, query string) ([]models.WorkspaceSearchResult, error) {
+	rows, err := r.db.Query(ctx, `
+		SELECT
+			id,
+			name,
+			description
+		FROM workspaces
+		WHERE user_id = $1
+		  AND deleted_at IS NULL
+		  AND (name ILIKE $2 OR description ILIKE $2)
+		ORDER BY COALESCE(updated_at, created_at) DESC
+		`,
+		userID,
+		"%"+query+"%")
+	if err != nil {
+		return nil, err
+	}
+	return pgx.CollectRows(rows, pgx.RowToStructByName[models.WorkspaceSearchResult])
 }
 
 func (r *WorkspaceRepository) GetIDByName(ctx context.Context, name string, userID uuid.UUID) (uuid.UUID, error) {
@@ -89,7 +109,7 @@ func (r *WorkspaceRepository) GetIDByName(ctx context.Context, name string, user
 		WHERE name = $1
 		  AND user_id = $2
 		  AND deleted_at IS NULL
-		ORDER BY created_at DESC
+		ORDER BY COALESCE(updated_at, created_at) DESC
 		LIMIT 1
 		`,
 		name,
@@ -225,7 +245,7 @@ func (r *WorkspaceRepository) GetByID(ctx context.Context, id uuid.UUID, userID 
 					Position:    derefInt(colPos),
 					WorkspaceID: derefUUID(colWsID),
 					CreatedAt:   derefTime(colCreatedAt),
-					UpdatedAt:   derefTime(colUpdatedAt),
+					UpdatedAt:   colUpdatedAt,
 				},
 				Tasks: []models.TaskWithTag{},
 			}
@@ -243,7 +263,7 @@ func (r *WorkspaceRepository) GetByID(ctx context.Context, id uuid.UUID, userID 
 					ColumnID:    derefUUID(taskColID),
 					TagID:       taskTagID,
 					CreatedAt:   derefTime(taskCreatedAt),
-					UpdatedAt:   derefTime(taskUpdAt),
+					UpdatedAt:   taskUpdAt,
 				},
 			}
 			if tagID != nil {
