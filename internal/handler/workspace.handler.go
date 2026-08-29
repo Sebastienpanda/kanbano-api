@@ -6,6 +6,7 @@ import (
 	"kanbano-api/internal/ws"
 	"log"
 	"net/http"
+	"strings"
 
 	"github.com/google/uuid"
 )
@@ -63,6 +64,24 @@ func (h *WorkspaceHandler) Names(w http.ResponseWriter, r *http.Request) {
 	}
 
 	writeJSON(w, http.StatusOK, names)
+}
+
+func (h *WorkspaceHandler) Search(w http.ResponseWriter, r *http.Request) {
+	userID := userIDFromContext(r)
+
+	query := strings.TrimSpace(r.URL.Query().Get("q"))
+	if query == "" {
+		http.Error(w, "missing query parameter q", http.StatusBadRequest)
+		return
+	}
+
+	results, err := h.repo.Search(r.Context(), userID, query)
+	if err != nil {
+		serverError(w, err)
+		return
+	}
+
+	writeJSON(w, http.StatusOK, results)
 }
 
 func (h *WorkspaceHandler) recentOrNil(ctx context.Context, userID uuid.UUID) any {

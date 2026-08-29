@@ -80,6 +80,26 @@ func (r *WorkspaceRepository) ListNames(ctx context.Context, userID uuid.UUID) (
 	return pgx.CollectRows(rows, pgx.RowToStructByName[models.WorkspaceName])
 }
 
+func (r *WorkspaceRepository) Search(ctx context.Context, userID uuid.UUID, query string) ([]models.WorkspaceSearchResult, error) {
+	rows, err := r.db.Query(ctx, `
+		SELECT
+			id,
+			name,
+			description
+		FROM workspaces
+		WHERE user_id = $1
+		  AND deleted_at IS NULL
+		  AND (name ILIKE $2 OR description ILIKE $2)
+		ORDER BY COALESCE(updated_at, created_at) DESC
+		`,
+		userID,
+		"%"+query+"%")
+	if err != nil {
+		return nil, err
+	}
+	return pgx.CollectRows(rows, pgx.RowToStructByName[models.WorkspaceSearchResult])
+}
+
 func (r *WorkspaceRepository) GetIDByName(ctx context.Context, name string, userID uuid.UUID) (uuid.UUID, error) {
 	var id uuid.UUID
 	row := r.db.QueryRow(ctx, `
