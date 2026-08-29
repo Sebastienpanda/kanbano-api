@@ -31,7 +31,7 @@ func (r *WorkspaceRepository) List(ctx context.Context, userID uuid.UUID) ([]mod
 		FROM workspaces
 		WHERE user_id = $1
 		  AND deleted_at IS NULL
-		ORDER BY created_at DESC
+		ORDER BY COALESCE(updated_at, created_at) DESC
 		`,
 		userID)
 	if err != nil {
@@ -53,7 +53,7 @@ func (r *WorkspaceRepository) ListRecent(ctx context.Context, userID uuid.UUID) 
 		FROM workspaces
 		WHERE user_id = $1
 		  AND deleted_at IS NULL
-		ORDER BY created_at DESC
+		ORDER BY COALESCE(updated_at, created_at) DESC
 		LIMIT 6
 		`,
 		userID)
@@ -71,7 +71,7 @@ func (r *WorkspaceRepository) ListNames(ctx context.Context, userID uuid.UUID) (
 		FROM workspaces
 		WHERE user_id = $1
 		  AND deleted_at IS NULL
-		ORDER BY created_at DESC
+		ORDER BY COALESCE(updated_at, created_at) DESC
 		`,
 		userID)
 	if err != nil {
@@ -89,7 +89,7 @@ func (r *WorkspaceRepository) GetIDByName(ctx context.Context, name string, user
 		WHERE name = $1
 		  AND user_id = $2
 		  AND deleted_at IS NULL
-		ORDER BY created_at DESC
+		ORDER BY COALESCE(updated_at, created_at) DESC
 		LIMIT 1
 		`,
 		name,
@@ -225,7 +225,7 @@ func (r *WorkspaceRepository) GetByID(ctx context.Context, id uuid.UUID, userID 
 					Position:    derefInt(colPos),
 					WorkspaceID: derefUUID(colWsID),
 					CreatedAt:   derefTime(colCreatedAt),
-					UpdatedAt:   derefTime(colUpdatedAt),
+					UpdatedAt:   colUpdatedAt,
 				},
 				Tasks: []models.TaskWithTag{},
 			}
@@ -243,7 +243,7 @@ func (r *WorkspaceRepository) GetByID(ctx context.Context, id uuid.UUID, userID 
 					ColumnID:    derefUUID(taskColID),
 					TagID:       taskTagID,
 					CreatedAt:   derefTime(taskCreatedAt),
-					UpdatedAt:   derefTime(taskUpdAt),
+					UpdatedAt:   taskUpdAt,
 				},
 			}
 			if tagID != nil {

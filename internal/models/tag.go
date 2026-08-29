@@ -18,5 +18,5 @@ type Tag struct {
 	Color     *string   `json:"color"`
 	UserID    uuid.UUID `json:"user_id"`
 	CreatedAt time.Time `json:"created_at"`
-	UpdatedAt time.Time `json:"updated_at"`
+	UpdatedAt *time.Time `json:"updated_at"`
 }
