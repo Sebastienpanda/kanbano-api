@@ -32,7 +32,7 @@ func (r *TagRepository) List(ctx context.Context, userID uuid.UUID) ([]models.Ta
 }
 
 func (r *TagRepository) Create(ctx context.Context, name string, color *string, userID uuid.UUID) (models.Tag, error) {
-	rows, err := r.db.Query(ctx, `
+	return queryStruct[models.Tag](ctx, r.db, `
 		INSERT INTO tags (name, color, user_id)
 		VALUES ($1, $2, $3)
 		RETURNING id, name, color, user_id, created_at, updated_at
@@ -40,14 +40,10 @@ func (r *TagRepository) Create(ctx context.Context, name string, color *string, 
 		name,
 		color,
 		userID)
-	if err != nil {
-		return models.Tag{}, err
-	}
-	return pgx.CollectOneRow(rows, pgx.RowToStructByName[models.Tag])
 }
 
 func (r *TagRepository) Update(ctx context.Context, id uuid.UUID, userID uuid.UUID, name *string, color *string) (models.Tag, error) {
-	rows, err := r.db.Query(ctx, `
+	return queryStruct[models.Tag](ctx, r.db, `
 		UPDATE tags
 		SET name       = COALESCE($1, name),
 		    color      = COALESCE($2, color),
@@ -59,14 +55,10 @@ func (r *TagRepository) Update(ctx context.Context, id uuid.UUID, userID uuid.UU
 		color,
 		id,
 		userID)
-	if err != nil {
-		return models.Tag{}, err
-	}
-	return pgx.CollectOneRow(rows, pgx.RowToStructByName[models.Tag])
 }
 
 func (r *TagRepository) GetOrCreate(ctx context.Context, userID uuid.UUID, name string) (models.Tag, error) {
-	rows, err := r.db.Query(ctx, `
+	return queryStruct[models.Tag](ctx, r.db, `
 		INSERT INTO tags (name, user_id)
 		VALUES ($1, $2)
 		ON CONFLICT (user_id, name)
@@ -75,14 +67,10 @@ func (r *TagRepository) GetOrCreate(ctx context.Context, userID uuid.UUID, name 
 		`,
 		name,
 		userID)
-	if err != nil {
-		return models.Tag{}, err
-	}
-	return pgx.CollectOneRow(rows, pgx.RowToStructByName[models.Tag])
 }
 
 func (r *TagRepository) GetByID(ctx context.Context, id uuid.UUID) (models.TagName, error) {
-	rows, err := r.db.Query(ctx, `
+	return queryStruct[models.TagName](ctx, r.db, `
 		SELECT id,
 		       name,
 		       color
@@ -90,10 +78,6 @@ func (r *TagRepository) GetByID(ctx context.Context, id uuid.UUID) (models.TagNa
 		WHERE id = $1
 		`,
 		id)
-	if err != nil {
-		return models.TagName{}, err
-	}
-	return pgx.CollectOneRow(rows, pgx.RowToStructByName[models.TagName])
 }
 
 func (r *TagRepository) Exists(ctx context.Context, id uuid.UUID, userID uuid.UUID) (bool, error) {

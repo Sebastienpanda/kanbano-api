@@ -5,7 +5,6 @@ import (
 	"kanbano-api/internal/models"
 
 	"github.com/google/uuid"
-	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgxpool"
 )
 
@@ -18,7 +17,7 @@ func NewTaskRepository(db *pgxpool.Pool) *TaskRepository {
 }
 
 func (r *TaskRepository) Create(ctx context.Context, name string, description *string, columnID uuid.UUID, tagID *uuid.UUID, status *string) (models.Task, error) {
-	rows, err := r.db.Query(ctx, `
+	return queryStruct[models.Task](ctx, r.db, `
 		INSERT INTO tasks (name, description, column_id, tag_id, status, position)
 		VALUES ($1, $2, $3, $4, $5, (SELECT COALESCE(MAX(position) + 1, 0) FROM tasks WHERE column_id = $3))
 		RETURNING id, name, description, position, column_id, tag_id, status, created_at, updated_at, deleted_at
@@ -28,14 +27,10 @@ func (r *TaskRepository) Create(ctx context.Context, name string, description *s
 		columnID,
 		tagID,
 		status)
-	if err != nil {
-		return models.Task{}, err
-	}
-	return pgx.CollectOneRow(rows, pgx.RowToStructByName[models.Task])
 }
 
 func (r *TaskRepository) Update(ctx context.Context, id uuid.UUID, columnID uuid.UUID, name *string, description *string, tagID *uuid.UUID, status *string) (models.Task, error) {
-	rows, err := r.db.Query(ctx, `
+	return queryStruct[models.Task](ctx, r.db, `
 		UPDATE tasks
 		SET name        = COALESCE($1, name),
 		    description = COALESCE($2, description),
@@ -51,10 +46,6 @@ func (r *TaskRepository) Update(ctx context.Context, id uuid.UUID, columnID uuid
 		status,
 		id,
 		columnID)
-	if err != nil {
-		return models.Task{}, err
-	}
-	return pgx.CollectOneRow(rows, pgx.RowToStructByName[models.Task])
 }
 
 func (r *TaskRepository) Reorder(ctx context.Context, id uuid.UUID, columnID uuid.UUID, position *int, newColumnID *uuid.UUID) (models.Task, error) {
@@ -169,7 +160,7 @@ func (r *TaskRepository) Reorder(ctx context.Context, id uuid.UUID, columnID uui
 		}
 	}
 
-	rows, err := tx.Query(ctx, `
+	task, err := queryStruct[models.Task](ctx, tx, `
 		UPDATE tasks
 		SET position   = $1,
 		    column_id  = $2,
@@ -184,10 +175,6 @@ func (r *TaskRepository) Reorder(ctx context.Context, id uuid.UUID, columnID uui
 	if err != nil {
 		return models.Task{}, err
 	}
-	task, err := pgx.CollectOneRow(rows, pgx.RowToStructByName[models.Task])
-	if err != nil {
-		return models.Task{}, err
-	}
 
 	err = tx.Commit(ctx)
 	if err != nil {
@@ -198,7 +185,7 @@ func (r *TaskRepository) Reorder(ctx context.Context, id uuid.UUID, columnID uui
 }
 
 func (r *TaskRepository) SoftDelete(ctx context.Context, id uuid.UUID, columnID uuid.UUID) (models.Task, error) {
-	rows, err := r.db.Query(ctx, `
+	return queryStruct[models.Task](ctx, r.db, `
 		UPDATE tasks
 		SET deleted_at = NOW()
 		WHERE id = $1
@@ -208,8 +195,4 @@ func (r *TaskRepository) SoftDelete(ctx context.Context, id uuid.UUID, columnID 
 		`,
 		id,
 		columnID)
-	if err != nil {
-		return models.Task{}, err
-	}
-	return pgx.CollectOneRow(rows, pgx.RowToStructByName[models.Task])
 }

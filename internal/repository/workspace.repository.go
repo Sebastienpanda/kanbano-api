@@ -120,7 +120,7 @@ func (r *WorkspaceRepository) GetIDByName(ctx context.Context, name string, user
 }
 
 func (r *WorkspaceRepository) Create(ctx context.Context, name string, description *string, userID uuid.UUID) (models.Workspace, error) {
-	rows, err := r.db.Query(ctx, `
+	return queryStruct[models.Workspace](ctx, r.db, `
 		INSERT INTO workspaces (name, description, user_id)
 		VALUES ($1, $2, $3)
 		RETURNING id, name, description, user_id, created_at, updated_at, deleted_at
@@ -128,10 +128,6 @@ func (r *WorkspaceRepository) Create(ctx context.Context, name string, descripti
 		name,
 		description,
 		userID)
-	if err != nil {
-		return models.Workspace{}, err
-	}
-	return pgx.CollectOneRow(rows, pgx.RowToStructByName[models.Workspace])
 }
 
 func (r *WorkspaceRepository) GetByID(ctx context.Context, id uuid.UUID, userID uuid.UUID) (models.WorkspaceDetail, error) {
@@ -309,7 +305,7 @@ func (r *WorkspaceRepository) GetByID(ctx context.Context, id uuid.UUID, userID 
 }
 
 func (r *WorkspaceRepository) Update(ctx context.Context, id uuid.UUID, userID uuid.UUID, name *string, description *string) (models.Workspace, error) {
-	rows, err := r.db.Query(ctx, `
+	return queryStruct[models.Workspace](ctx, r.db, `
 		UPDATE workspaces
 		SET name        = COALESCE($1, name),
 		    description = COALESCE($2, description),
@@ -323,10 +319,6 @@ func (r *WorkspaceRepository) Update(ctx context.Context, id uuid.UUID, userID u
 		description,
 		id,
 		userID)
-	if err != nil {
-		return models.Workspace{}, err
-	}
-	return pgx.CollectOneRow(rows, pgx.RowToStructByName[models.Workspace])
 }
 
 func (r *WorkspaceRepository) Exists(ctx context.Context, id uuid.UUID, userID uuid.UUID) (bool, error) {
@@ -353,7 +345,7 @@ func (r *WorkspaceRepository) SoftDelete(ctx context.Context, id uuid.UUID, user
 	}
 	defer tx.Rollback(ctx)
 
-	rows, err := tx.Query(ctx, `
+	workspace, err := queryStruct[models.Workspace](ctx, tx, `
 		UPDATE workspaces
 		SET deleted_at = NOW()
 		WHERE id = $1
@@ -363,10 +355,6 @@ func (r *WorkspaceRepository) SoftDelete(ctx context.Context, id uuid.UUID, user
 		`,
 		id,
 		userID)
-	if err != nil {
-		return models.Workspace{}, err
-	}
-	workspace, err := pgx.CollectOneRow(rows, pgx.RowToStructByName[models.Workspace])
 	if err != nil {
 		return models.Workspace{}, err
 	}

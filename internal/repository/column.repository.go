@@ -18,17 +18,13 @@ func NewColumnRepository(db *pgxpool.Pool) *ColumnRepository {
 }
 
 func (r *ColumnRepository) Create(ctx context.Context, name string, workspaceID uuid.UUID) (models.Column, error) {
-	rows, err := r.db.Query(ctx, `
+	return queryStruct[models.Column](ctx, r.db, `
 		INSERT INTO columns (name, workspace_id, position)
 		VALUES ($1, $2, (SELECT COALESCE(MAX(position) + 1, 0) FROM columns WHERE workspace_id = $2))
 		RETURNING id, name, position, workspace_id, created_at, updated_at, deleted_at
 		`,
 		name,
 		workspaceID)
-	if err != nil {
-		return models.Column{}, err
-	}
-	return pgx.CollectOneRow(rows, pgx.RowToStructByName[models.Column])
 }
 
 func (r *ColumnRepository) ListNames(ctx context.Context, workspaceID uuid.UUID) ([]models.ColumnName, error) {
@@ -63,7 +59,7 @@ func (r *ColumnRepository) Exists(ctx context.Context, id uuid.UUID, workspaceID
 }
 
 func (r *ColumnRepository) Update(ctx context.Context, id uuid.UUID, workspaceID uuid.UUID, name *string) (models.Column, error) {
-	rows, err := r.db.Query(ctx, `
+	return queryStruct[models.Column](ctx, r.db, `
 		UPDATE columns
 		SET name       = COALESCE($1, name),
 		    updated_at = NOW()
@@ -75,10 +71,6 @@ func (r *ColumnRepository) Update(ctx context.Context, id uuid.UUID, workspaceID
 		name,
 		id,
 		workspaceID)
-	if err != nil {
-		return models.Column{}, err
-	}
-	return pgx.CollectOneRow(rows, pgx.RowToStructByName[models.Column])
 }
 
 func (r *ColumnRepository) Reorder(ctx context.Context, id uuid.UUID, workspaceID uuid.UUID, position int) (models.Column, error) {
@@ -138,7 +130,7 @@ func (r *ColumnRepository) Reorder(ctx context.Context, id uuid.UUID, workspaceI
 		}
 	}
 
-	rows, err := tx.Query(ctx, `
+	column, err := queryStruct[models.Column](ctx, tx, `
 		UPDATE columns
 		SET position   = $1,
 		    updated_at = NOW()
@@ -150,10 +142,6 @@ func (r *ColumnRepository) Reorder(ctx context.Context, id uuid.UUID, workspaceI
 		position,
 		id,
 		workspaceID)
-	if err != nil {
-		return models.Column{}, err
-	}
-	column, err := pgx.CollectOneRow(rows, pgx.RowToStructByName[models.Column])
 	if err != nil {
 		return models.Column{}, err
 	}
@@ -173,7 +161,7 @@ func (r *ColumnRepository) SoftDelete(ctx context.Context, id uuid.UUID, workspa
 	}
 	defer tx.Rollback(ctx)
 
-	rows, err := tx.Query(ctx, `
+	column, err := queryStruct[models.Column](ctx, tx, `
 		UPDATE columns
 		SET deleted_at = NOW()
 		WHERE id = $1
@@ -183,10 +171,6 @@ func (r *ColumnRepository) SoftDelete(ctx context.Context, id uuid.UUID, workspa
 		`,
 		id,
 		workspaceID)
-	if err != nil {
-		return models.Column{}, err
-	}
-	column, err := pgx.CollectOneRow(rows, pgx.RowToStructByName[models.Column])
 	if err != nil {
 		return models.Column{}, err
 	}
