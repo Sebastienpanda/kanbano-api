@@ -2,36 +2,31 @@ package routes
 
 import (
 	"kanbano-api/internal/handler"
-	"kanbano-api/internal/middleware"
 
 	"github.com/go-chi/chi/v5"
 )
 
-func WorkspacesRoutes(r chi.Router, wh *handler.WorkspaceHandler, ch *handler.ColumnHandler, th *handler.TaskHandler) {
-	r.Route("/workspaces", func(r chi.Router) {
-		r.Use(middleware.AuthRequired)
+type Handlers struct {
+	Workspace *handler.WorkspaceHandler
+	Column    *handler.ColumnHandler
+	Task      *handler.TaskHandler
+}
 
-		r.Get("/", wh.List)
-		r.Get("/recent", wh.Recent)
-		r.Get("/search", wh.Search)
-		r.Get("/names", wh.Names)
-		r.Get("/columns/names", ch.NamesByWorkspaceName)
-		r.Post("/", wh.Create)
+func Workspaces(r chi.Router, h Handlers) {
+	r.Route("/workspaces", func(r chi.Router) {
+
+		r.Get("/", h.Workspace.List)
+		r.Get("/recent", h.Workspace.Recent)
+		r.Get("/search", h.Workspace.Search)
+		r.Get("/names", h.Workspace.Names)
+		r.Post("/", h.Workspace.Create)
 
 		r.Route("/{id}", func(r chi.Router) {
-			r.Get("/", wh.Get)
-			r.Patch("/", wh.Update)
-			r.Delete("/", wh.Delete)
+			r.Get("/", h.Workspace.Get)
+			r.Patch("/", h.Workspace.Update)
+			r.Delete("/", h.Workspace.Delete)
 
-			r.Post("/columns", ch.Create)
-			r.Patch("/columns/{columnId}", ch.Update)
-			r.Patch("/columns/{columnId}/reorder", ch.Reorder)
-			r.Delete("/columns/{columnId}", ch.Delete)
-
-			r.Post("/columns/{columnId}/tasks", th.Create)
-			r.Patch("/columns/{columnId}/tasks/{taskId}", th.Update)
-			r.Patch("/columns/{columnId}/tasks/{taskId}/reorder", th.Reorder)
-			r.Delete("/columns/{columnId}/tasks/{taskId}", th.Delete)
+			columns(r, h)
 		})
 	})
 }
