@@ -22,7 +22,7 @@ type UserHandler struct {
 }
 
 type updateMeBody struct {
-	Name string `json:"name"`
+	Name string `json:"name" validate:"required,min=1,max=100"`
 }
 
 // meResponse is the wire shape for /me: the user, plus the avatar URLs when set.
@@ -49,12 +49,8 @@ func (h *UserHandler) Me(w http.ResponseWriter, r *http.Request) {
 func (h *UserHandler) UpdateMe(w http.ResponseWriter, r *http.Request) {
 	userID := userIDFromContext(r)
 
-	body, ok := decodeJSON[updateMeBody](w, r)
+	body, ok := decodeAndValidate[updateMeBody](w, r)
 	if !ok {
-		return
-	}
-	if body.Name == "" {
-		http.Error(w, "invalid request body", http.StatusBadRequest)
 		return
 	}
 

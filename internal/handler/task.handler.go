@@ -21,18 +21,18 @@ type TaskHandler struct {
 }
 
 type createTaskBody struct {
-	Name        string     `json:"name"`
-	Description *string    `json:"description"`
+	Name        string     `json:"name" validate:"required,min=1,max=200"`
+	Description *string    `json:"description" validate:"omitempty,max=5000"`
 	TagID       *uuid.UUID `json:"tag_id"`
-	TagName     *string    `json:"tag_name"`
+	TagName     *string    `json:"tag_name" validate:"omitempty,max=50"`
 	Status      *string    `json:"status"`
 }
 
 type updateTaskBody struct {
-	Name        *string    `json:"name"`
-	Description *string    `json:"description"`
+	Name        *string    `json:"name" validate:"omitempty,min=1,max=200"`
+	Description *string    `json:"description" validate:"omitempty,max=5000"`
 	TagID       *uuid.UUID `json:"tag_id"`
-	TagName     *string    `json:"tag_name"`
+	TagName     *string    `json:"tag_name" validate:"omitempty,max=50"`
 	Status      *string    `json:"status"`
 }
 
@@ -54,7 +54,7 @@ func validateStatus(w http.ResponseWriter, status *string) bool {
 }
 
 type reorderTaskBody struct {
-	Position       *int       `json:"position"`
+	Position       *int       `json:"position" validate:"omitempty,min=0"`
 	TargetColumnID *uuid.UUID `json:"targetColumnId"`
 }
 
@@ -136,12 +136,8 @@ func (h *TaskHandler) Create(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	body, ok := decodeJSON[createTaskBody](w, r)
+	body, ok := decodeAndValidate[createTaskBody](w, r)
 	if !ok {
-		return
-	}
-	if body.Name == "" {
-		http.Error(w, "invalid request body", http.StatusBadRequest)
 		return
 	}
 	if !validateStatus(w, body.Status) {
@@ -171,7 +167,7 @@ func (h *TaskHandler) Update(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	body, ok := decodeJSON[updateTaskBody](w, r)
+	body, ok := decodeAndValidate[updateTaskBody](w, r)
 	if !ok {
 		return
 	}
@@ -204,7 +200,7 @@ func (h *TaskHandler) Reorder(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	body, ok := decodeJSON[reorderTaskBody](w, r)
+	body, ok := decodeAndValidate[reorderTaskBody](w, r)
 	if !ok {
 		return
 	}

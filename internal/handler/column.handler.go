@@ -18,15 +18,15 @@ type ColumnHandler struct {
 }
 
 type createColumnBody struct {
-	Name string `json:"name"`
+	Name string `json:"name" validate:"required,min=1,max=100"`
 }
 
 type updateColumnBody struct {
-	Name *string `json:"name"`
+	Name *string `json:"name" validate:"omitempty,min=1,max=100"`
 }
 
 type reorderColumnBody struct {
-	Position int `json:"position"`
+	Position int `json:"position" validate:"min=0"`
 }
 
 func NewColumnHandler(repo *repository.ColumnRepository, workspaceRepo *repository.WorkspaceRepository, hub *ws.Hub) *ColumnHandler {
@@ -96,12 +96,8 @@ func (h *ColumnHandler) Create(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	body, ok := decodeJSON[createColumnBody](w, r)
+	body, ok := decodeAndValidate[createColumnBody](w, r)
 	if !ok {
-		return
-	}
-	if body.Name == "" {
-		http.Error(w, "invalid request body", http.StatusBadRequest)
 		return
 	}
 
@@ -118,7 +114,7 @@ func (h *ColumnHandler) Update(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	body, ok := decodeJSON[updateColumnBody](w, r)
+	body, ok := decodeAndValidate[updateColumnBody](w, r)
 	if !ok {
 		return
 	}
@@ -133,7 +129,7 @@ func (h *ColumnHandler) Reorder(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	body, ok := decodeJSON[reorderColumnBody](w, r)
+	body, ok := decodeAndValidate[reorderColumnBody](w, r)
 	if !ok {
 		return
 	}

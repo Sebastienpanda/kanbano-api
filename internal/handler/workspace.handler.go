@@ -17,13 +17,13 @@ type WorkspaceHandler struct {
 }
 
 type createWorkspaceBody struct {
-	Name        string  `json:"name"`
-	Description *string `json:"description"`
+	Name        string  `json:"name" validate:"required,min=1,max=100"`
+	Description *string `json:"description" validate:"omitempty,max=2000"`
 }
 
 type updateWorkspaceBody struct {
-	Name        *string `json:"name"`
-	Description *string `json:"description"`
+	Name        *string `json:"name" validate:"omitempty,min=1,max=100"`
+	Description *string `json:"description" validate:"omitempty,max=2000"`
 }
 
 func NewWorkspaceHandler(repo *repository.WorkspaceRepository, hub *ws.Hub) *WorkspaceHandler {
@@ -96,12 +96,8 @@ func (h *WorkspaceHandler) recentOrNil(ctx context.Context, userID uuid.UUID) an
 func (h *WorkspaceHandler) Create(w http.ResponseWriter, r *http.Request) {
 	userID := userIDFromContext(r)
 
-	body, ok := decodeJSON[createWorkspaceBody](w, r)
+	body, ok := decodeAndValidate[createWorkspaceBody](w, r)
 	if !ok {
-		return
-	}
-	if body.Name == "" {
-		http.Error(w, "invalid request body", http.StatusBadRequest)
 		return
 	}
 
@@ -141,7 +137,7 @@ func (h *WorkspaceHandler) Update(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	body, ok := decodeJSON[updateWorkspaceBody](w, r)
+	body, ok := decodeAndValidate[updateWorkspaceBody](w, r)
 	if !ok {
 		return
 	}

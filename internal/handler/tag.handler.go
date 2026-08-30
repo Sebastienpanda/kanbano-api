@@ -10,13 +10,13 @@ type TagHandler struct {
 }
 
 type createTagBody struct {
-	Name  string  `json:"name"`
-	Color *string `json:"color"`
+	Name  string  `json:"name" validate:"required,min=1,max=50"`
+	Color *string `json:"color" validate:"omitempty,max=50"`
 }
 
 type updateTagBody struct {
-	Name  *string `json:"name"`
-	Color *string `json:"color"`
+	Name  *string `json:"name" validate:"omitempty,min=1,max=50"`
+	Color *string `json:"color" validate:"omitempty,max=50"`
 }
 
 func NewTagHandler(repo *repository.TagRepository) *TagHandler {
@@ -38,12 +38,8 @@ func (h *TagHandler) List(w http.ResponseWriter, r *http.Request) {
 func (h *TagHandler) Create(w http.ResponseWriter, r *http.Request) {
 	userID := userIDFromContext(r)
 
-	body, ok := decodeJSON[createTagBody](w, r)
+	body, ok := decodeAndValidate[createTagBody](w, r)
 	if !ok {
-		return
-	}
-	if body.Name == "" {
-		http.Error(w, "invalid request body", http.StatusBadRequest)
 		return
 	}
 
@@ -59,7 +55,7 @@ func (h *TagHandler) Update(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	body, ok := decodeJSON[updateTagBody](w, r)
+	body, ok := decodeAndValidate[updateTagBody](w, r)
 	if !ok {
 		return
 	}
