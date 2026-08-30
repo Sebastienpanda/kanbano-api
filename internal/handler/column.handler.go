@@ -4,6 +4,7 @@ import (
 	"errors"
 	"kanbano-api/internal/models"
 	"kanbano-api/internal/repository"
+	"kanbano-api/internal/utils"
 	"kanbano-api/internal/ws"
 	"net/http"
 
@@ -38,14 +39,14 @@ func (h *ColumnHandler) NamesByWorkspaceName(w http.ResponseWriter, r *http.Requ
 
 	name := r.URL.Query().Get("name")
 	if name == "" {
-		http.Error(w, "missing name parameter", http.StatusBadRequest)
+		badRequest(w, "missing name parameter")
 		return
 	}
 
 	workspaceID, err := h.workspaceRepo.GetIDByName(r.Context(), name, userID)
 	if err != nil {
 		if errors.Is(err, pgx.ErrNoRows) {
-			http.Error(w, "workspace not found", http.StatusNotFound)
+			notFound(w, "workspace not found")
 			return
 		}
 		serverError(w, err)
@@ -58,7 +59,7 @@ func (h *ColumnHandler) NamesByWorkspaceName(w http.ResponseWriter, r *http.Requ
 		return
 	}
 
-	writeJSON(w, http.StatusOK, names)
+	utils.RespondJSON(w, http.StatusOK, names)
 }
 
 func (h *ColumnHandler) parseWorkspaceContext(w http.ResponseWriter, r *http.Request) (userID, workspaceID uuid.UUID, ok bool) {
@@ -79,15 +80,16 @@ func (h *ColumnHandler) broadcastColumn(userID, workspaceID uuid.UUID, eventType
 	h.hub.Broadcast(userID, ws.Event{Type: eventType, WorkspaceID: workspaceID, Data: column})
 }
 
-// respondColumn handles the common tail of Update/Reorder/Delete: turn a repo
-// error into a 404/500, otherwise broadcast the change and write the column back.
-func (h *ColumnHandler) respondColumn(w http.ResponseWriter, userID, workspaceID uuid.UUID, eventType ws.EventType, column models.Column, err error) {
+// applyColumnChange handles the common tail of Update/Reorder/Delete: turn a repo
+// error into a 404/500, otherwise broadcast the change (WS carries the payload).
+// Returns true when the change succeeded and the caller should send its ack.
+func (h *ColumnHandler) applyColumnChange(w http.ResponseWriter, userID, workspaceID uuid.UUID, eventType ws.EventType, column models.Column, err error) bool {
 	if handleRepoError(w, err, "column not found") {
-		return
+		return false
 	}
 
 	h.broadcastColumn(userID, workspaceID, eventType, column)
-	writeJSON(w, http.StatusOK, column)
+	return true
 }
 
 func (h *ColumnHandler) Create(w http.ResponseWriter, r *http.Request) {
@@ -96,16 +98,18 @@ func (h *ColumnHandler) Create(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	body, ok := decodeAndValidate[createColumnBody](w, r)
+	body, ok := utils.DecodeAndValidate[createColumnBody]("ColumnHandler.Create", w, r)
 	if !ok {
 		return
 	}
 
 	column, err := h.repo.Create(r.Context(), body.Name, workspaceID)
-	if err == nil {
-		h.broadcastColumn(userID, workspaceID, ws.ColumnCreated, column)
+	if err != nil {
+		serverError(w, err)
+		return
 	}
-	respondCreated(w, column, err)
+	h.broadcastColumn(userID, workspaceID, ws.ColumnCreated, column)
+	utils.RespondCreated(w, &column.ID)
 }
 
 func (h *ColumnHandler) Update(w http.ResponseWriter, r *http.Request) {
@@ -114,13 +118,15 @@ func (h *ColumnHandler) Update(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	body, ok := decodeAndValidate[updateColumnBody](w, r)
+	body, ok := utils.DecodeAndValidate[updateColumnBody]("ColumnHandler.Update", w, r)
 	if !ok {
 		return
 	}
 
 	column, err := h.repo.Update(r.Context(), columnID, workspaceID, body.Name)
-	h.respondColumn(w, userID, workspaceID, ws.ColumnUpdated, column, err)
+	if h.applyColumnChange(w, userID, workspaceID, ws.ColumnUpdated, column, err) {
+		utils.RespondUpdated(w)
+	}
 }
 
 func (h *ColumnHandler) Reorder(w http.ResponseWriter, r *http.Request) {
@@ -129,13 +135,15 @@ func (h *ColumnHandler) Reorder(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	body, ok := decodeAndValidate[reorderColumnBody](w, r)
+	body, ok := utils.DecodeAndValidate[reorderColumnBody]("ColumnHandler.Reorder", w, r)
 	if !ok {
 		return
 	}
 
 	column, err := h.repo.Reorder(r.Context(), columnID, workspaceID, body.Position)
-	h.respondColumn(w, userID, workspaceID, ws.ColumnUpdated, column, err)
+	if h.applyColumnChange(w, userID, workspaceID, ws.ColumnUpdated, column, err) {
+		utils.RespondUpdated(w)
+	}
 }
 
 func (h *ColumnHandler) Delete(w http.ResponseWriter, r *http.Request) {
@@ -145,5 +153,7 @@ func (h *ColumnHandler) Delete(w http.ResponseWriter, r *http.Request) {
 	}
 
 	column, err := h.repo.SoftDelete(r.Context(), columnID, workspaceID)
-	h.respondColumn(w, userID, workspaceID, ws.ColumnDeleted, column, err)
+	if h.applyColumnChange(w, userID, workspaceID, ws.ColumnDeleted, column, err) {
+		utils.RespondDeleted(w)
+	}
 }

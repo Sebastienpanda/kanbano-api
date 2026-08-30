@@ -5,6 +5,7 @@ import (
 	"crypto/subtle"
 	"encoding/json"
 	"fmt"
+	"kanbano-api/internal/utils"
 	"log"
 	"net/http"
 	"strings"
@@ -32,24 +33,24 @@ type brevoEvent struct {
 
 func (h *BrevoHandler) Webhook(w http.ResponseWriter, r *http.Request) {
 	if h.webhookSecret == "" || !secretMatches(r.URL.Query().Get("token"), h.webhookSecret) {
-		http.Error(w, "unauthorized", http.StatusUnauthorized)
+		utils.RespondError(w, http.StatusUnauthorized, "unauthorized")
 		return
 	}
 
-	event, ok := decodeJSON[brevoEvent](w, r)
-	if !ok {
+	event, err := utils.DecodeJsonBody[brevoEvent]("BrevoHandler.Webhook", w, r)
+	if err != nil {
 		return
 	}
 
 	log.Printf("brevo webhook received: event=%s email=%s", sanitizeLogValue(event.Event), maskEmail(event.Email))
 
 	if h.discordURL != "" {
-		if err := h.notifyDiscord(event); err != nil {
+		if err := h.notifyDiscord(*event); err != nil {
 			log.Printf("failed to notify discord for brevo event: %v", err)
 		}
 	}
 
-	writeJSON(w, http.StatusOK, map[string]string{"status": "ok"})
+	utils.RespondJSON(w, http.StatusOK, map[string]string{"status": "ok"})
 }
 
 var failureEvents = map[string]bool{

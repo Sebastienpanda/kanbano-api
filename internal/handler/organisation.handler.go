@@ -2,6 +2,7 @@ package handler
 
 import (
 	"kanbano-api/internal/repository"
+	"kanbano-api/internal/utils"
 	"net/http"
 )
 
@@ -21,5 +22,5 @@ func (h *OrganisationHandler) Get(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	writeJSON(w, http.StatusOK, organisation)
+	utils.RespondJSON(w, http.StatusOK, organisation)
 }

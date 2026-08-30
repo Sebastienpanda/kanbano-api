@@ -4,6 +4,7 @@ import (
 	"context"
 	"kanbano-api/internal/models"
 	"kanbano-api/internal/repository"
+	"kanbano-api/internal/utils"
 	"kanbano-api/internal/ws"
 	"log"
 	"net/http"
@@ -47,7 +48,7 @@ func validateStatus(w http.ResponseWriter, status *string) bool {
 		return true
 	}
 	if !validTaskStatuses[*status] {
-		http.Error(w, "invalid status", http.StatusBadRequest)
+		badRequest(w, "invalid status")
 		return false
 	}
 	return true
@@ -70,7 +71,7 @@ func (h *TaskHandler) resolveTagID(w http.ResponseWriter, r *http.Request, userI
 			return nil, false
 		}
 		if !exists {
-			http.Error(w, "tag not found", http.StatusNotFound)
+			notFound(w, "tag not found")
 			return nil, false
 		}
 		return tagID, true
@@ -109,7 +110,7 @@ func (h *TaskHandler) parseTaskContext(w http.ResponseWriter, r *http.Request) (
 
 	columnID, err := uuid.Parse(chi.URLParam(r, "columnId"))
 	if err != nil {
-		http.Error(w, "invalid columnId", http.StatusBadRequest)
+		badRequest(w, "invalid columnId")
 		ok = false
 		return
 	}
@@ -121,7 +122,7 @@ func (h *TaskHandler) parseTaskContext(w http.ResponseWriter, r *http.Request) (
 		return
 	}
 	if !colExists {
-		http.Error(w, "column not found", http.StatusNotFound)
+		notFound(w, "column not found")
 		ok = false
 		return
 	}
@@ -136,7 +137,7 @@ func (h *TaskHandler) Create(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	body, ok := decodeAndValidate[createTaskBody](w, r)
+	body, ok := utils.DecodeAndValidate[createTaskBody]("TaskHandler.Create", w, r)
 	if !ok {
 		return
 	}
@@ -150,10 +151,12 @@ func (h *TaskHandler) Create(w http.ResponseWriter, r *http.Request) {
 	}
 
 	task, err := h.repo.Create(r.Context(), body.Name, body.Description, columnID, tagID, body.Status)
-	if err == nil {
-		h.broadcastTask(r.Context(), userID, workspaceID, ws.TaskCreated, task)
+	if err != nil {
+		serverError(w, err)
+		return
 	}
-	respondCreated(w, task, err)
+	h.broadcastTask(r.Context(), userID, workspaceID, ws.TaskCreated, task)
+	utils.RespondCreated(w, &task.ID)
 }
 
 func (h *TaskHandler) Update(w http.ResponseWriter, r *http.Request) {
@@ -167,7 +170,7 @@ func (h *TaskHandler) Update(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	body, ok := decodeAndValidate[updateTaskBody](w, r)
+	body, ok := utils.DecodeAndValidate[updateTaskBody]("TaskHandler.Update", w, r)
 	if !ok {
 		return
 	}
@@ -186,7 +189,7 @@ func (h *TaskHandler) Update(w http.ResponseWriter, r *http.Request) {
 	}
 
 	h.broadcastTask(r.Context(), userID, workspaceID, ws.TaskUpdated, task)
-	writeJSON(w, http.StatusOK, task)
+	utils.RespondUpdated(w)
 }
 
 func (h *TaskHandler) Reorder(w http.ResponseWriter, r *http.Request) {
@@ -200,13 +203,13 @@ func (h *TaskHandler) Reorder(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	body, ok := decodeAndValidate[reorderTaskBody](w, r)
+	body, ok := utils.DecodeAndValidate[reorderTaskBody]("TaskHandler.Reorder", w, r)
 	if !ok {
 		return
 	}
 
 	if body.TargetColumnID == nil && body.Position == nil {
-		http.Error(w, "position or targetColumnId required", http.StatusBadRequest)
+		badRequest(w, "position or targetColumnId required")
 		return
 	}
 
@@ -217,17 +220,17 @@ func (h *TaskHandler) Reorder(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 		if !colExists {
-			http.Error(w, "target column not found in this workspace", http.StatusNotFound)
+			notFound(w, "target column not found in this workspace")
 			return
 		}
 	}
 
-	task, err := h.repo.Reorder(r.Context(), taskID, columnID, body.Position, body.TargetColumnID)
+	_, err := h.repo.Reorder(r.Context(), taskID, columnID, body.Position, body.TargetColumnID)
 	if handleRepoError(w, err, "task not found") {
 		return
 	}
 
-	writeJSON(w, http.StatusOK, task)
+	utils.RespondUpdated(w)
 }
 
 func (h *TaskHandler) Delete(w http.ResponseWriter, r *http.Request) {
@@ -248,5 +251,5 @@ func (h *TaskHandler) Delete(w http.ResponseWriter, r *http.Request) {
 
 	h.broadcastTask(r.Context(), userID, workspaceID, ws.TaskDeleted, task)
 
-	writeJSON(w, http.StatusOK, task)
+	utils.RespondDeleted(w)
 }
