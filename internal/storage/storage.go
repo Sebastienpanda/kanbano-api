@@ -118,9 +118,6 @@ func (c *Client) RemovePrefix(ctx context.Context, prefix string) error {
 	return nil
 }
 
-// URL returns the public address of a stored object. PublicBaseURL is expected
-// to be Garage's website endpoint for this bucket (bucket selected by Host), so
-// the bucket name is not part of the path.
 func (c *Client) URL(key string) string {
 	return c.publicBase + "/" + key
 }
