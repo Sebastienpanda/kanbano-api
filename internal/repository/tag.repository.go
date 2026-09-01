@@ -19,9 +19,9 @@ func NewTagRepository(db *pgxpool.Pool) *TagRepository {
 
 func (r *TagRepository) List(ctx context.Context, userID uuid.UUID) ([]models.Tag, error) {
 	rows, err := r.db.Query(ctx, `
-		SELECT id, name, color, created_at, updated_at, user_id
+		SELECT id, name, color, created_by, updated_by, deleted_by, created_at, updated_at
 		FROM tags
-		WHERE user_id = $1
+		WHERE created_by = $1
 		ORDER BY name
 		`,
 		userID)
@@ -33,9 +33,9 @@ func (r *TagRepository) List(ctx context.Context, userID uuid.UUID) ([]models.Ta
 
 func (r *TagRepository) Create(ctx context.Context, name string, color *string, userID uuid.UUID) (models.Tag, error) {
 	return queryStruct[models.Tag](ctx, r.db, `
-		INSERT INTO tags (name, color, user_id)
+		INSERT INTO tags (name, color, created_by)
 		VALUES ($1, $2, $3)
-		RETURNING id, name, color, user_id, created_at, updated_at
+		RETURNING id, name, color, created_by, updated_by, deleted_by, created_at, updated_at
 		`,
 		name,
 		color,
@@ -47,9 +47,10 @@ func (r *TagRepository) Update(ctx context.Context, id uuid.UUID, userID uuid.UU
 		UPDATE tags
 		SET name       = COALESCE($1, name),
 		    color      = COALESCE($2, color),
+		    updated_by = $4,
 		    updated_at = NOW()
-		WHERE id = $3 AND user_id = $4
-		RETURNING id, name, color, user_id, created_at, updated_at
+		WHERE id = $3 AND created_by = $4
+		RETURNING id, name, color, created_by, updated_by, deleted_by, created_at, updated_at
 		`,
 		name,
 		color,
@@ -59,11 +60,11 @@ func (r *TagRepository) Update(ctx context.Context, id uuid.UUID, userID uuid.UU
 
 func (r *TagRepository) GetOrCreate(ctx context.Context, userID uuid.UUID, name string) (models.Tag, error) {
 	return queryStruct[models.Tag](ctx, r.db, `
-		INSERT INTO tags (name, user_id)
+		INSERT INTO tags (name, created_by)
 		VALUES ($1, $2)
-		ON CONFLICT (user_id, name)
+		ON CONFLICT (created_by, name)
 		    DO UPDATE SET name = EXCLUDED.name
-		RETURNING id, name, color, user_id, created_at, updated_at
+		RETURNING id, name, color, created_by, updated_by, deleted_by, created_at, updated_at
 		`,
 		name,
 		userID)
@@ -87,7 +88,7 @@ func (r *TagRepository) Exists(ctx context.Context, id uuid.UUID, userID uuid.UU
 			SELECT 1
 			FROM tags
 			WHERE id = $1
-			  AND user_id = $2
+			  AND created_by = $2
 		)
 		`,
 		id,

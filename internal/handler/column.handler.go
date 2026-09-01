@@ -103,7 +103,7 @@ func (h *ColumnHandler) Create(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	column, err := h.repo.Create(r.Context(), body.Name, workspaceID)
+	column, err := h.repo.Create(r.Context(), body.Name, workspaceID, userID)
 	if err != nil {
 		serverError(w, err)
 		return
@@ -123,7 +123,7 @@ func (h *ColumnHandler) Update(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	column, err := h.repo.Update(r.Context(), columnID, workspaceID, body.Name)
+	column, err := h.repo.Update(r.Context(), columnID, workspaceID, body.Name, userID)
 	if h.applyColumnChange(w, userID, workspaceID, ws.ColumnUpdated, column, err) {
 		utils.RespondUpdated(w)
 	}
@@ -140,7 +140,7 @@ func (h *ColumnHandler) Reorder(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	column, err := h.repo.Reorder(r.Context(), columnID, workspaceID, body.Position)
+	column, err := h.repo.Reorder(r.Context(), columnID, workspaceID, body.Position, userID)
 	if h.applyColumnChange(w, userID, workspaceID, ws.ColumnUpdated, column, err) {
 		utils.RespondUpdated(w)
 	}
@@ -152,7 +152,7 @@ func (h *ColumnHandler) Delete(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	column, err := h.repo.SoftDelete(r.Context(), columnID, workspaceID)
+	column, err := h.repo.SoftDelete(r.Context(), columnID, workspaceID, userID)
 	if h.applyColumnChange(w, userID, workspaceID, ws.ColumnDeleted, column, err) {
 		utils.RespondDeleted(w)
 	}

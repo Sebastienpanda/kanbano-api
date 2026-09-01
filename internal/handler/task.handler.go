@@ -150,7 +150,7 @@ func (h *TaskHandler) Create(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	task, err := h.repo.Create(r.Context(), body.Name, body.Description, columnID, tagID, body.Status)
+	task, err := h.repo.Create(r.Context(), body.Name, body.Description, columnID, tagID, body.Status, userID)
 	if err != nil {
 		serverError(w, err)
 		return
@@ -183,7 +183,7 @@ func (h *TaskHandler) Update(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	task, err := h.repo.Update(r.Context(), taskID, columnID, body.Name, body.Description, tagID, body.Status)
+	task, err := h.repo.Update(r.Context(), taskID, columnID, body.Name, body.Description, tagID, body.Status, userID)
 	if handleRepoError(w, err, "task not found") {
 		return
 	}
@@ -193,7 +193,7 @@ func (h *TaskHandler) Update(w http.ResponseWriter, r *http.Request) {
 }
 
 func (h *TaskHandler) Reorder(w http.ResponseWriter, r *http.Request) {
-	_, workspaceID, columnID, ok := h.parseTaskContext(w, r)
+	userID, workspaceID, columnID, ok := h.parseTaskContext(w, r)
 	if !ok {
 		return
 	}
@@ -225,7 +225,7 @@ func (h *TaskHandler) Reorder(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 
-	_, err := h.repo.Reorder(r.Context(), taskID, columnID, body.Position, body.TargetColumnID)
+	_, err := h.repo.Reorder(r.Context(), taskID, columnID, body.Position, body.TargetColumnID, userID)
 	if handleRepoError(w, err, "task not found") {
 		return
 	}
@@ -244,7 +244,7 @@ func (h *TaskHandler) Delete(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	task, err := h.repo.SoftDelete(r.Context(), taskID, columnID)
+	task, err := h.repo.SoftDelete(r.Context(), taskID, columnID, userID)
 	if handleRepoError(w, err, "task not found") {
 		return
 	}
