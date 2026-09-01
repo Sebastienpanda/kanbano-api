@@ -72,9 +72,10 @@ func RegisterRoutes(r *chi.Mux, pool *pgxpool.Pool, store *storage.Client) {
 		TagsRoutes(r, h.tag)
 		UsersRoutes(r, h.user)
 		OrganisationRoutes(r, h.organisation)
-
-		r.Get("/ws", h.ws.Serve)
 	})
+
+	// /ws s'authentifie lui-même via Sec-WebSocket-Protocol (pas de header Authorization possible côté navigateur)
+	r.Get("/api/v1/ws", h.ws.Serve)
 
 	BrevoRoutes(r, h.brevo)
 }
