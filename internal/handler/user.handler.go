@@ -157,18 +157,5 @@ func (h *UserHandler) response(user models.User) meResponse {
 }
 
 func (h *UserHandler) avatarSet(user models.User) *models.AvatarSet {
-	if h.store == nil || user.AvatarVersion == nil || *user.AvatarVersion == "" {
-		return nil
-	}
-	version := *user.AvatarVersion
-
-	formats := func(size int) models.AvatarFormats {
-		return models.AvatarFormats{
-			Avif: h.store.URL(media.AvatarObjectKey(user.ID, version, media.FormatAVIF, size)),
-			Webp: h.store.URL(media.AvatarObjectKey(user.ID, version, media.FormatWebP, size)),
-			Png:  h.store.URL(media.AvatarObjectKey(user.ID, version, media.FormatPNG, size)),
-		}
-	}
-
-	return &models.AvatarSet{Size45: formats(45), Size100: formats(100)}
+	return avatarSet(h.store, user.ID, user.AvatarVersion)
 }
