@@ -109,7 +109,7 @@ func (h *WorkspaceHandler) Create(w http.ResponseWriter, r *http.Request) {
 	}
 	h.hub.Broadcast(userID, ws.Event{
 		Type:        ws.WorkspaceCreated,
-		WorkspaceID: workspace.ID,
+		WorkspaceID: &workspace.ID,
 		Data:        workspace,
 		Recent:      h.recentOrNil(r.Context(), userID),
 	})
@@ -150,7 +150,7 @@ func (h *WorkspaceHandler) Update(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	h.hub.Broadcast(userID, ws.Event{Type: ws.WorkspaceUpdated, WorkspaceID: workspace.ID, Data: workspace})
+	h.hub.Broadcast(userID, ws.Event{Type: ws.WorkspaceUpdated, WorkspaceID: &workspace.ID, Data: workspace})
 	utils.RespondUpdated(w)
 }
 
@@ -169,7 +169,7 @@ func (h *WorkspaceHandler) Delete(w http.ResponseWriter, r *http.Request) {
 
 	h.hub.Broadcast(userID, ws.Event{
 		Type:        ws.WorkspaceDeleted,
-		WorkspaceID: workspace.ID,
+		WorkspaceID: &workspace.ID,
 	})
 	utils.RespondDeleted(w)
 }

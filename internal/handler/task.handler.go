@@ -99,7 +99,7 @@ func (h *TaskHandler) broadcastTask(ctx context.Context, userID, workspaceID uui
 			taskWithTag.Tag = &tag
 		}
 	}
-	h.hub.Broadcast(userID, ws.Event{Type: eventType, WorkspaceID: workspaceID, Data: taskWithTag})
+	h.hub.Broadcast(userID, ws.Event{Type: eventType, WorkspaceID: &workspaceID, Data: taskWithTag})
 }
 
 func (h *TaskHandler) parseTaskContext(w http.ResponseWriter, r *http.Request) (userID, workspaceID, columnID uuid.UUID, ok bool) {

@@ -77,7 +77,7 @@ func (h *ColumnHandler) parseColumnContext(w http.ResponseWriter, r *http.Reques
 }
 
 func (h *ColumnHandler) broadcastColumn(userID, workspaceID uuid.UUID, eventType ws.EventType, column models.Column) {
-	h.hub.Broadcast(userID, ws.Event{Type: eventType, WorkspaceID: workspaceID, Data: column})
+	h.hub.Broadcast(userID, ws.Event{Type: eventType, WorkspaceID: &workspaceID, Data: column})
 }
 
 // applyColumnChange handles the common tail of Update/Reorder/Delete: turn a repo
