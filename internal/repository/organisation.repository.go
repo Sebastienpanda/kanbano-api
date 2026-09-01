@@ -17,7 +17,7 @@ func NewOrganisationRepository(db *pgxpool.Pool) *OrganisationRepository {
 	return &OrganisationRepository{db: db}
 }
 
-func (r *OrganisationRepository) GetByUserWithWorkspaces(ctx context.Context, userID uuid.UUID) (models.Organisation, error) {
+func (r *OrganisationRepository) GetOrganisationWithMembers(ctx context.Context, userID uuid.UUID) (models.Organisation, error) {
 	var org models.Organisation
 
 	row := r.db.QueryRow(ctx, `
@@ -26,30 +26,31 @@ func (r *OrganisationRepository) GetByUserWithWorkspaces(ctx context.Context, us
 		WHERE user_id = $1
 	`, userID)
 
-	err := row.Scan(&org.ID, &org.UserID)
-	if err != nil {
+	if err := row.Scan(&org.ID, &org.UserID); err != nil {
 		return models.Organisation{}, err
 	}
 
 	rows, err := r.db.Query(ctx, `
 		SELECT
-			id,
-			name
-		FROM workspaces
-		WHERE user_id = $1
-			AND deleted_at IS NULL
-		ORDER BY COALESCE(updated_at, created_at) DESC
-	`, userID)
+			u.id,
+			u.name,
+			u.avatar_version,
+			om.joined_at
+		FROM organisation_members om
+		JOIN users u ON u.id = om.member_id
+		WHERE om.organisation_id = $1
+		ORDER BY om.joined_at
+	`, org.ID)
 	if err != nil {
 		return models.Organisation{}, err
 	}
 
-	org.Workspaces, err = pgx.CollectRows(rows, pgx.RowToStructByName[models.WorkspaceName])
+	org.Members, err = pgx.CollectRows(rows, pgx.RowToStructByName[models.OrganisationMember])
 	if err != nil {
 		return models.Organisation{}, err
 	}
-	if org.Workspaces == nil {
-		org.Workspaces = []models.WorkspaceName{}
+	if org.Members == nil {
+		org.Members = []models.OrganisationMember{}
 	}
 
 	return org, nil

@@ -50,7 +50,7 @@ func newHandlers(repos repositories, store *storage.Client, hub *ws.Hub) handler
 		task:         handler.NewTaskHandler(repos.task, repos.workspace, repos.column, repos.tag, hub),
 		tag:          handler.NewTagHandler(repos.tag),
 		user:         handler.NewUserHandler(repos.user, store, hub),
-		organisation: handler.NewOrganisationHandler(repos.organisation),
+		organisation: handler.NewOrganisationHandler(repos.organisation, store),
 		ws:           handler.NewWSHandler(hub),
 		brevo:        handler.NewBrevoHandler(os.Getenv("BREVO_WEBHOOK_SECRET"), os.Getenv("DISCORD_WEBHOOK_URL")),
 	}

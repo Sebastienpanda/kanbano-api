@@ -24,12 +24,15 @@ func (r *WorkspaceRepository) List(ctx context.Context, userID uuid.UUID) ([]mod
 			id,
 			name,
 			description,
-			user_id,
+			organisation_id,
+			created_by,
+			updated_by,
+			deleted_by,
 			created_at,
 			updated_at,
 			deleted_at
 		FROM workspaces
-		WHERE user_id = $1
+		WHERE created_by = $1
 		  AND deleted_at IS NULL
 		ORDER BY COALESCE(updated_at, created_at) DESC
 		`,
@@ -46,12 +49,15 @@ func (r *WorkspaceRepository) ListRecent(ctx context.Context, userID uuid.UUID) 
 			id,
 			name,
 			description,
-			user_id,
+			organisation_id,
+			created_by,
+			updated_by,
+			deleted_by,
 			created_at,
 			updated_at,
 			deleted_at
 		FROM workspaces
-		WHERE user_id = $1
+		WHERE created_by = $1
 		  AND deleted_at IS NULL
 		ORDER BY COALESCE(updated_at, created_at) DESC
 		LIMIT 6
@@ -69,7 +75,7 @@ func (r *WorkspaceRepository) ListNames(ctx context.Context, userID uuid.UUID) (
 			id,
 			name
 		FROM workspaces
-		WHERE user_id = $1
+		WHERE created_by = $1
 		  AND deleted_at IS NULL
 		ORDER BY COALESCE(updated_at, created_at) DESC
 		`,
@@ -87,7 +93,7 @@ func (r *WorkspaceRepository) Search(ctx context.Context, userID uuid.UUID, quer
 			name,
 			description
 		FROM workspaces
-		WHERE user_id = $1
+		WHERE created_by = $1
 		  AND deleted_at IS NULL
 		  AND (name ILIKE $2 OR description ILIKE $2)
 		ORDER BY COALESCE(updated_at, created_at) DESC
@@ -107,7 +113,7 @@ func (r *WorkspaceRepository) GetIDByName(ctx context.Context, name string, user
 			id
 		FROM workspaces
 		WHERE name = $1
-		  AND user_id = $2
+		  AND created_by = $2
 		  AND deleted_at IS NULL
 		ORDER BY COALESCE(updated_at, created_at) DESC
 		LIMIT 1
@@ -121,9 +127,9 @@ func (r *WorkspaceRepository) GetIDByName(ctx context.Context, name string, user
 
 func (r *WorkspaceRepository) Create(ctx context.Context, name string, description *string, userID uuid.UUID) (models.Workspace, error) {
 	return queryStruct[models.Workspace](ctx, r.db, `
-		INSERT INTO workspaces (name, description, user_id)
-		VALUES ($1, $2, $3)
-		RETURNING id, name, description, user_id, created_at, updated_at, deleted_at
+		INSERT INTO workspaces (name, description, created_by, organisation_id)
+		VALUES ($1, $2, $3, (SELECT id FROM organisations WHERE user_id = $3))
+		RETURNING id, name, description, organisation_id, created_by, updated_by, deleted_by, created_at, updated_at, deleted_at
 		`,
 		name,
 		description,
@@ -133,17 +139,19 @@ func (r *WorkspaceRepository) Create(ctx context.Context, name string, descripti
 func (r *WorkspaceRepository) GetByID(ctx context.Context, id uuid.UUID, userID uuid.UUID) (models.WorkspaceDetail, error) {
 	rows, err := r.db.Query(ctx, `
 		SELECT
-			w.id, 
-			w.name, 
-			w.description, 
-			w.user_id, 
-			w.created_at, 
+			w.id,
+			w.name,
+			w.description,
+			w.organisation_id,
+			w.created_by,
+			w.created_at,
 			w.updated_at,
-			c.id, 
-			c.name, 
-			c.position, 
-			c.workspace_id, 
-			c.created_at, 
+			c.id,
+			c.name,
+			c.position,
+			c.workspace_id,
+			c.created_by,
+			c.created_at,
 			c.updated_at,
 			t.id,
 			t.name,
@@ -151,6 +159,7 @@ func (r *WorkspaceRepository) GetByID(ctx context.Context, id uuid.UUID, userID 
 			t.position,
 			t.column_id,
 			t.tag_id,
+			t.created_by,
 			t.created_at,
 			t.updated_at,
 			g.id,
@@ -166,7 +175,7 @@ func (r *WorkspaceRepository) GetByID(ctx context.Context, id uuid.UUID, userID 
 		LEFT JOIN tags g
 		    ON g.id = t.tag_id
 		WHERE w.id = $1 
-		  AND w.user_id = $2 
+		  AND w.created_by = $2 
 		  AND w.deleted_at IS NULL
 		ORDER BY c.position, 
 		         t.position, 
@@ -187,12 +196,13 @@ func (r *WorkspaceRepository) GetByID(ctx context.Context, id uuid.UUID, userID 
 
 	for rows.Next() {
 		var (
-			wsID, wsUserID             uuid.UUID
+			wsID, wsCreatedBy, wsOrgID uuid.UUID
 			wsName                     string
 			wsDesc                     *string
 			wsCreatedAt                time.Time
 			wsUpdatedAt                *time.Time
 			colID, colWsID             *uuid.UUID
+			colCreatedBy               *uuid.UUID
 			colName                    *string
 			colPos                     *int
 			colCreatedAt, colUpdatedAt *time.Time
@@ -200,7 +210,7 @@ func (r *WorkspaceRepository) GetByID(ctx context.Context, id uuid.UUID, userID 
 			taskName                   *string
 			taskDesc                   *string
 			taskPos                    *int
-			taskTagID                  *uuid.UUID
+			taskTagID, taskCreatedBy   *uuid.UUID
 			taskCreatedAt, taskUpdAt   *time.Time
 			tagID                      *uuid.UUID
 			tagName                    *string
@@ -208,9 +218,9 @@ func (r *WorkspaceRepository) GetByID(ctx context.Context, id uuid.UUID, userID 
 		)
 
 		err := rows.Scan(
-			&wsID, &wsName, &wsDesc, &wsUserID, &wsCreatedAt, &wsUpdatedAt,
-			&colID, &colName, &colPos, &colWsID, &colCreatedAt, &colUpdatedAt,
-			&taskID, &taskName, &taskDesc, &taskPos, &taskColID, &taskTagID, &taskCreatedAt, &taskUpdAt,
+			&wsID, &wsName, &wsDesc, &wsOrgID, &wsCreatedBy, &wsCreatedAt, &wsUpdatedAt,
+			&colID, &colName, &colPos, &colWsID, &colCreatedBy, &colCreatedAt, &colUpdatedAt,
+			&taskID, &taskName, &taskDesc, &taskPos, &taskColID, &taskTagID, &taskCreatedBy, &taskCreatedAt, &taskUpdAt,
 			&tagID, &tagName, &tagColor,
 		)
 		if err != nil {
@@ -219,12 +229,13 @@ func (r *WorkspaceRepository) GetByID(ctx context.Context, id uuid.UUID, userID 
 
 		if !initialized {
 			detail.Workspace = models.Workspace{
-				ID:          wsID,
-				Name:        wsName,
-				Description: wsDesc,
-				UserID:      wsUserID,
-				CreatedAt:   wsCreatedAt,
-				UpdatedAt:   wsUpdatedAt,
+				ID:             wsID,
+				Name:           wsName,
+				Description:    wsDesc,
+				OrganisationID: wsOrgID,
+				CreatedBy:      wsCreatedBy,
+				CreatedAt:      wsCreatedAt,
+				UpdatedAt:      wsUpdatedAt,
 			}
 			initialized = true
 		}
@@ -240,6 +251,7 @@ func (r *WorkspaceRepository) GetByID(ctx context.Context, id uuid.UUID, userID 
 					Name:        derefStr(colName),
 					Position:    derefInt(colPos),
 					WorkspaceID: derefUUID(colWsID),
+					CreatedBy:   derefUUID(colCreatedBy),
 					CreatedAt:   derefTime(colCreatedAt),
 					UpdatedAt:   colUpdatedAt,
 				},
@@ -258,6 +270,7 @@ func (r *WorkspaceRepository) GetByID(ctx context.Context, id uuid.UUID, userID 
 					Position:    derefInt(taskPos),
 					ColumnID:    derefUUID(taskColID),
 					TagID:       taskTagID,
+					CreatedBy:   derefUUID(taskCreatedBy),
 					CreatedAt:   derefTime(taskCreatedAt),
 					UpdatedAt:   taskUpdAt,
 				},
@@ -289,7 +302,7 @@ func (r *WorkspaceRepository) GetByID(ctx context.Context, id uuid.UUID, userID 
 		       name,
 		       color
 		FROM tags
-		WHERE user_id = $1
+		WHERE created_by = $1
 		ORDER BY name
 		`,
 		userID)
@@ -309,11 +322,12 @@ func (r *WorkspaceRepository) Update(ctx context.Context, id uuid.UUID, userID u
 		UPDATE workspaces
 		SET name        = COALESCE($1, name),
 		    description = COALESCE($2, description),
+		    updated_by  = $4,
 		    updated_at  = NOW()
 		WHERE id = $3
-		  AND user_id = $4
+		  AND created_by = $4
 		  AND deleted_at IS NULL
-		RETURNING id, name, description, user_id, created_at, updated_at, deleted_at
+		RETURNING id, name, description, organisation_id, created_by, updated_by, deleted_by, created_at, updated_at, deleted_at
 		`,
 		name,
 		description,
@@ -328,7 +342,7 @@ func (r *WorkspaceRepository) Exists(ctx context.Context, id uuid.UUID, userID u
 			SELECT 1
 			FROM workspaces
 			WHERE id = $1 
-			  AND user_id = $2 
+			  AND created_by = $2 
 			  AND deleted_at IS NULL
 		)
 		`,
@@ -347,11 +361,12 @@ func (r *WorkspaceRepository) SoftDelete(ctx context.Context, id uuid.UUID, user
 
 	workspace, err := queryStruct[models.Workspace](ctx, tx, `
 		UPDATE workspaces
-		SET deleted_at = NOW()
+		SET deleted_at = NOW(),
+		    deleted_by = $2
 		WHERE id = $1
-		  AND user_id = $2
+		  AND created_by = $2
 		  AND deleted_at IS NULL
-		RETURNING id, name, description, user_id, created_at, updated_at, deleted_at
+		RETURNING id, name, description, organisation_id, created_by, updated_by, deleted_by, created_at, updated_at, deleted_at
 		`,
 		id,
 		userID)
@@ -361,11 +376,13 @@ func (r *WorkspaceRepository) SoftDelete(ctx context.Context, id uuid.UUID, user
 
 	_, err = tx.Exec(ctx, `
 		UPDATE columns
-		SET deleted_at = NOW()
-		WHERE workspace_id = $1 
+		SET deleted_at = NOW(),
+		    deleted_by = $2
+		WHERE workspace_id = $1
 		  AND deleted_at IS NULL
 		`,
-		id)
+		id,
+		userID)
 
 	if err != nil {
 		return models.Workspace{}, err
@@ -373,12 +390,14 @@ func (r *WorkspaceRepository) SoftDelete(ctx context.Context, id uuid.UUID, user
 
 	_, err = tx.Exec(ctx, `
 		UPDATE tasks
-		SET deleted_at = NOW()
-		WHERE deleted_at IS NULL 
-		  AND column_id 
+		SET deleted_at = NOW(),
+		    deleted_by = $2
+		WHERE deleted_at IS NULL
+		  AND column_id
 		          IN (SELECT id FROM columns WHERE workspace_id = $1)
 		`,
-		id)
+		id,
+		userID)
 
 	if err != nil {
 		return models.Workspace{}, err
