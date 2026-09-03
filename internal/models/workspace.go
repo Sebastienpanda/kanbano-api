@@ -31,17 +31,34 @@ type WorkspaceSearchResult struct {
 }
 
 type WorkspaceDetail struct {
-	Workspace
-	Columns []ColumnWithTasks `json:"columns"`
-	Tags    []TagName         `json:"tags"`
+	ID          uuid.UUID         `json:"id"`
+	Name        string            `json:"name"`
+	Description *string           `json:"description"`
+	CreatedAt   time.Time         `json:"created_at"`
+	UpdatedAt   *time.Time        `json:"updated_at"`
+	Columns     []ColumnWithTasks `json:"columns"`
 }
 
 type ColumnWithTasks struct {
-	Column
-	Tasks []TaskWithTag `json:"tasks"`
+	ID        uuid.UUID     `json:"id"`
+	Name      string        `json:"name"`
+	Position  int           `json:"position"`
+	CreatedBy uuid.UUID     `json:"created_by"`
+	CreatedAt time.Time     `json:"created_at"`
+	UpdatedAt *time.Time    `json:"updated_at"`
+	Tasks     []TaskWithTag `json:"tasks"`
 }
 
 type TaskWithTag struct {
-	Task
-	Tag *TagName `json:"tag"`
+	ID          uuid.UUID  `json:"id"`
+	Name        string     `json:"name"`
+	Description *string    `json:"description"`
+	Position    int        `json:"position"`
+	ColumnID    uuid.UUID  `json:"column_id"`
+	TagID       *uuid.UUID `json:"tag_id"`
+	Status      *string    `json:"status"`
+	CreatedBy   uuid.UUID  `json:"created_by"`
+	CreatedAt   time.Time  `json:"created_at"`
+	UpdatedAt   *time.Time `json:"updated_at"`
+	Tag         *TagName   `json:"tag"`
 }

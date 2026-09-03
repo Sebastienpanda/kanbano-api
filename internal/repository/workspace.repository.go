@@ -142,8 +142,6 @@ func (r *WorkspaceRepository) GetByID(ctx context.Context, id uuid.UUID, userID 
 			w.id,
 			w.name,
 			w.description,
-			w.organisation_id,
-			w.created_by,
 			w.created_at,
 			w.updated_at,
 			c.id,
@@ -159,6 +157,7 @@ func (r *WorkspaceRepository) GetByID(ctx context.Context, id uuid.UUID, userID 
 			t.position,
 			t.column_id,
 			t.tag_id,
+			t.status,
 			t.created_by,
 			t.created_at,
 			t.updated_at,
@@ -196,7 +195,7 @@ func (r *WorkspaceRepository) GetByID(ctx context.Context, id uuid.UUID, userID 
 
 	for rows.Next() {
 		var (
-			wsID, wsCreatedBy, wsOrgID uuid.UUID
+			wsID                       uuid.UUID
 			wsName                     string
 			wsDesc                     *string
 			wsCreatedAt                time.Time
@@ -211,6 +210,7 @@ func (r *WorkspaceRepository) GetByID(ctx context.Context, id uuid.UUID, userID 
 			taskDesc                   *string
 			taskPos                    *int
 			taskTagID, taskCreatedBy   *uuid.UUID
+			taskStatus                 *string
 			taskCreatedAt, taskUpdAt   *time.Time
 			tagID                      *uuid.UUID
 			tagName                    *string
@@ -218,9 +218,9 @@ func (r *WorkspaceRepository) GetByID(ctx context.Context, id uuid.UUID, userID 
 		)
 
 		err := rows.Scan(
-			&wsID, &wsName, &wsDesc, &wsOrgID, &wsCreatedBy, &wsCreatedAt, &wsUpdatedAt,
+			&wsID, &wsName, &wsDesc, &wsCreatedAt, &wsUpdatedAt,
 			&colID, &colName, &colPos, &colWsID, &colCreatedBy, &colCreatedAt, &colUpdatedAt,
-			&taskID, &taskName, &taskDesc, &taskPos, &taskColID, &taskTagID, &taskCreatedBy, &taskCreatedAt, &taskUpdAt,
+			&taskID, &taskName, &taskDesc, &taskPos, &taskColID, &taskTagID, &taskStatus, &taskCreatedBy, &taskCreatedAt, &taskUpdAt,
 			&tagID, &tagName, &tagColor,
 		)
 		if err != nil {
@@ -228,15 +228,11 @@ func (r *WorkspaceRepository) GetByID(ctx context.Context, id uuid.UUID, userID 
 		}
 
 		if !initialized {
-			detail.Workspace = models.Workspace{
-				ID:             wsID,
-				Name:           wsName,
-				Description:    wsDesc,
-				OrganisationID: wsOrgID,
-				CreatedBy:      wsCreatedBy,
-				CreatedAt:      wsCreatedAt,
-				UpdatedAt:      wsUpdatedAt,
-			}
+			detail.ID = wsID
+			detail.Name = wsName
+			detail.Description = wsDesc
+			detail.CreatedAt = wsCreatedAt
+			detail.UpdatedAt = wsUpdatedAt
 			initialized = true
 		}
 
@@ -246,16 +242,13 @@ func (r *WorkspaceRepository) GetByID(ctx context.Context, id uuid.UUID, userID 
 
 		if _, exists := columnsMap[*colID]; !exists {
 			col := models.ColumnWithTasks{
-				Column: models.Column{
-					ID:          *colID,
-					Name:        derefStr(colName),
-					Position:    derefInt(colPos),
-					WorkspaceID: derefUUID(colWsID),
-					CreatedBy:   derefUUID(colCreatedBy),
-					CreatedAt:   derefTime(colCreatedAt),
-					UpdatedAt:   colUpdatedAt,
-				},
-				Tasks: []models.TaskWithTag{},
+				ID:        *colID,
+				Name:      derefStr(colName),
+				Position:  derefInt(colPos),
+				CreatedBy: derefUUID(colCreatedBy),
+				CreatedAt: derefTime(colCreatedAt),
+				UpdatedAt: colUpdatedAt,
+				Tasks:     []models.TaskWithTag{},
 			}
 			columnsMap[*colID] = &col
 			columnOrder = append(columnOrder, *colID)
@@ -263,17 +256,16 @@ func (r *WorkspaceRepository) GetByID(ctx context.Context, id uuid.UUID, userID 
 
 		if taskID != nil {
 			task := models.TaskWithTag{
-				Task: models.Task{
-					ID:          *taskID,
-					Name:        derefStr(taskName),
-					Description: taskDesc,
-					Position:    derefInt(taskPos),
-					ColumnID:    derefUUID(taskColID),
-					TagID:       taskTagID,
-					CreatedBy:   derefUUID(taskCreatedBy),
-					CreatedAt:   derefTime(taskCreatedAt),
-					UpdatedAt:   taskUpdAt,
-				},
+				ID:          *taskID,
+				Name:        derefStr(taskName),
+				Description: taskDesc,
+				Position:    derefInt(taskPos),
+				ColumnID:    derefUUID(taskColID),
+				TagID:       taskTagID,
+				Status:      taskStatus,
+				CreatedBy:   derefUUID(taskCreatedBy),
+				CreatedAt:   derefTime(taskCreatedAt),
+				UpdatedAt:   taskUpdAt,
 			}
 			if tagID != nil {
 				task.Tag = &models.TagName{ID: *tagID, Name: derefStr(tagName), Color: tagColor}
@@ -295,23 +287,6 @@ func (r *WorkspaceRepository) GetByID(ctx context.Context, id uuid.UUID, userID 
 	detail.Columns = make([]models.ColumnWithTasks, 0, len(columnOrder))
 	for _, colID := range columnOrder {
 		detail.Columns = append(detail.Columns, *columnsMap[colID])
-	}
-
-	tagRows, err := r.db.Query(ctx, `
-		SELECT id,
-		       name,
-		       color
-		FROM tags
-		WHERE created_by = $1
-		ORDER BY name
-		`,
-		userID)
-	if err != nil {
-		return models.WorkspaceDetail{}, err
-	}
-	detail.Tags, err = pgx.CollectRows(tagRows, pgx.RowToStructByName[models.TagName])
-	if err != nil {
-		return models.WorkspaceDetail{}, err
 	}
 
 	return detail, nil

@@ -90,7 +90,18 @@ func (h *TaskHandler) resolveTagID(w http.ResponseWriter, r *http.Request, userI
 }
 
 func (h *TaskHandler) broadcastTask(ctx context.Context, userID, workspaceID uuid.UUID, eventType ws.EventType, task models.Task) {
-	taskWithTag := models.TaskWithTag{Task: task}
+	taskWithTag := models.TaskWithTag{
+		ID:          task.ID,
+		Name:        task.Name,
+		Description: task.Description,
+		Position:    task.Position,
+		ColumnID:    task.ColumnID,
+		TagID:       task.TagID,
+		Status:      task.Status,
+		CreatedBy:   task.CreatedBy,
+		CreatedAt:   task.CreatedAt,
+		UpdatedAt:   task.UpdatedAt,
+	}
 	if task.TagID != nil {
 		tag, err := h.tagRepo.GetByID(ctx, *task.TagID)
 		if err != nil {
