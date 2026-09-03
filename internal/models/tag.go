@@ -13,10 +13,12 @@ type TagName struct {
 }
 
 type Tag struct {
-	ID        uuid.UUID `json:"id"`
-	Name      string    `json:"name"`
-	Color     *string   `json:"color"`
-	UserID    uuid.UUID `json:"user_id"`
-	CreatedAt time.Time `json:"created_at"`
+	ID        uuid.UUID  `json:"id"`
+	Name      string     `json:"name"`
+	Color     *string    `json:"color"`
+	CreatedBy uuid.UUID  `json:"created_by"`
+	UpdatedBy *uuid.UUID `json:"updated_by"`
+	DeletedBy *uuid.UUID `json:"deleted_by"`
+	CreatedAt time.Time  `json:"created_at"`
 	UpdatedAt *time.Time `json:"updated_at"`
 }

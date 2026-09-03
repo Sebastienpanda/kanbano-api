@@ -4,6 +4,7 @@ import (
 	"context"
 	"kanbano-api/internal/models"
 	"kanbano-api/internal/repository"
+	"kanbano-api/internal/utils"
 	"kanbano-api/internal/ws"
 	"log"
 	"net/http"
@@ -21,18 +22,18 @@ type TaskHandler struct {
 }
 
 type createTaskBody struct {
-	Name        string     `json:"name"`
-	Description *string    `json:"description"`
+	Name        string     `json:"name" validate:"required,min=1,max=200"`
+	Description *string    `json:"description" validate:"omitempty,max=5000"`
 	TagID       *uuid.UUID `json:"tag_id"`
-	TagName     *string    `json:"tag_name"`
+	TagName     *string    `json:"tag_name" validate:"omitempty,max=50"`
 	Status      *string    `json:"status"`
 }
 
 type updateTaskBody struct {
-	Name        *string    `json:"name"`
-	Description *string    `json:"description"`
+	Name        *string    `json:"name" validate:"omitempty,min=1,max=200"`
+	Description *string    `json:"description" validate:"omitempty,max=5000"`
 	TagID       *uuid.UUID `json:"tag_id"`
-	TagName     *string    `json:"tag_name"`
+	TagName     *string    `json:"tag_name" validate:"omitempty,max=50"`
 	Status      *string    `json:"status"`
 }
 
@@ -47,14 +48,14 @@ func validateStatus(w http.ResponseWriter, status *string) bool {
 		return true
 	}
 	if !validTaskStatuses[*status] {
-		http.Error(w, "invalid status", http.StatusBadRequest)
+		badRequest(w, "invalid status")
 		return false
 	}
 	return true
 }
 
 type reorderTaskBody struct {
-	Position       *int       `json:"position"`
+	Position       *int       `json:"position" validate:"omitempty,min=0"`
 	TargetColumnID *uuid.UUID `json:"targetColumnId"`
 }
 
@@ -70,7 +71,7 @@ func (h *TaskHandler) resolveTagID(w http.ResponseWriter, r *http.Request, userI
 			return nil, false
 		}
 		if !exists {
-			http.Error(w, "tag not found", http.StatusNotFound)
+			notFound(w, "tag not found")
 			return nil, false
 		}
 		return tagID, true
@@ -89,7 +90,18 @@ func (h *TaskHandler) resolveTagID(w http.ResponseWriter, r *http.Request, userI
 }
 
 func (h *TaskHandler) broadcastTask(ctx context.Context, userID, workspaceID uuid.UUID, eventType ws.EventType, task models.Task) {
-	taskWithTag := models.TaskWithTag{Task: task}
+	taskWithTag := models.TaskWithTag{
+		ID:          task.ID,
+		Name:        task.Name,
+		Description: task.Description,
+		Position:    task.Position,
+		ColumnID:    task.ColumnID,
+		TagID:       task.TagID,
+		Status:      task.Status,
+		CreatedBy:   task.CreatedBy,
+		CreatedAt:   task.CreatedAt,
+		UpdatedAt:   task.UpdatedAt,
+	}
 	if task.TagID != nil {
 		tag, err := h.tagRepo.GetByID(ctx, *task.TagID)
 		if err != nil {
@@ -98,7 +110,7 @@ func (h *TaskHandler) broadcastTask(ctx context.Context, userID, workspaceID uui
 			taskWithTag.Tag = &tag
 		}
 	}
-	h.hub.Broadcast(userID, ws.Event{Type: eventType, WorkspaceID: workspaceID, Data: taskWithTag})
+	h.hub.Broadcast(userID, ws.Event{Type: eventType, WorkspaceID: &workspaceID, Data: taskWithTag})
 }
 
 func (h *TaskHandler) parseTaskContext(w http.ResponseWriter, r *http.Request) (userID, workspaceID, columnID uuid.UUID, ok bool) {
@@ -109,7 +121,7 @@ func (h *TaskHandler) parseTaskContext(w http.ResponseWriter, r *http.Request) (
 
 	columnID, err := uuid.Parse(chi.URLParam(r, "columnId"))
 	if err != nil {
-		http.Error(w, "invalid columnId", http.StatusBadRequest)
+		badRequest(w, "invalid columnId")
 		ok = false
 		return
 	}
@@ -121,7 +133,7 @@ func (h *TaskHandler) parseTaskContext(w http.ResponseWriter, r *http.Request) (
 		return
 	}
 	if !colExists {
-		http.Error(w, "column not found", http.StatusNotFound)
+		notFound(w, "column not found")
 		ok = false
 		return
 	}
@@ -136,12 +148,8 @@ func (h *TaskHandler) Create(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	body, ok := decodeJSON[createTaskBody](w, r)
+	body, ok := utils.DecodeAndValidate[createTaskBody]("TaskHandler.Create", w, r)
 	if !ok {
-		return
-	}
-	if body.Name == "" {
-		http.Error(w, "invalid request body", http.StatusBadRequest)
 		return
 	}
 	if !validateStatus(w, body.Status) {
@@ -153,11 +161,13 @@ func (h *TaskHandler) Create(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	task, err := h.repo.Create(r.Context(), body.Name, body.Description, columnID, tagID, body.Status)
-	if err == nil {
-		h.broadcastTask(r.Context(), userID, workspaceID, ws.TaskCreated, task)
+	task, err := h.repo.Create(r.Context(), body.Name, body.Description, columnID, tagID, body.Status, userID)
+	if err != nil {
+		serverError(w, err)
+		return
 	}
-	respondCreated(w, task, err)
+	h.broadcastTask(r.Context(), userID, workspaceID, ws.TaskCreated, task)
+	utils.RespondCreated(w, &task.ID)
 }
 
 func (h *TaskHandler) Update(w http.ResponseWriter, r *http.Request) {
@@ -171,7 +181,7 @@ func (h *TaskHandler) Update(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	body, ok := decodeJSON[updateTaskBody](w, r)
+	body, ok := utils.DecodeAndValidate[updateTaskBody]("TaskHandler.Update", w, r)
 	if !ok {
 		return
 	}
@@ -184,17 +194,17 @@ func (h *TaskHandler) Update(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	task, err := h.repo.Update(r.Context(), taskID, columnID, body.Name, body.Description, tagID, body.Status)
+	task, err := h.repo.Update(r.Context(), taskID, columnID, body.Name, body.Description, tagID, body.Status, userID)
 	if handleRepoError(w, err, "task not found") {
 		return
 	}
 
 	h.broadcastTask(r.Context(), userID, workspaceID, ws.TaskUpdated, task)
-	writeJSON(w, http.StatusOK, task)
+	utils.RespondUpdated(w)
 }
 
 func (h *TaskHandler) Reorder(w http.ResponseWriter, r *http.Request) {
-	_, workspaceID, columnID, ok := h.parseTaskContext(w, r)
+	userID, workspaceID, columnID, ok := h.parseTaskContext(w, r)
 	if !ok {
 		return
 	}
@@ -204,13 +214,13 @@ func (h *TaskHandler) Reorder(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	body, ok := decodeJSON[reorderTaskBody](w, r)
+	body, ok := utils.DecodeAndValidate[reorderTaskBody]("TaskHandler.Reorder", w, r)
 	if !ok {
 		return
 	}
 
 	if body.TargetColumnID == nil && body.Position == nil {
-		http.Error(w, "position or targetColumnId required", http.StatusBadRequest)
+		badRequest(w, "position or targetColumnId required")
 		return
 	}
 
@@ -221,17 +231,17 @@ func (h *TaskHandler) Reorder(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 		if !colExists {
-			http.Error(w, "target column not found in this workspace", http.StatusNotFound)
+			notFound(w, "target column not found in this workspace")
 			return
 		}
 	}
 
-	task, err := h.repo.Reorder(r.Context(), taskID, columnID, body.Position, body.TargetColumnID)
+	_, err := h.repo.Reorder(r.Context(), taskID, columnID, body.Position, body.TargetColumnID, userID)
 	if handleRepoError(w, err, "task not found") {
 		return
 	}
 
-	writeJSON(w, http.StatusOK, task)
+	utils.RespondUpdated(w)
 }
 
 func (h *TaskHandler) Delete(w http.ResponseWriter, r *http.Request) {
@@ -245,12 +255,12 @@ func (h *TaskHandler) Delete(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	task, err := h.repo.SoftDelete(r.Context(), taskID, columnID)
+	task, err := h.repo.SoftDelete(r.Context(), taskID, columnID, userID)
 	if handleRepoError(w, err, "task not found") {
 		return
 	}
 
 	h.broadcastTask(r.Context(), userID, workspaceID, ws.TaskDeleted, task)
 
-	writeJSON(w, http.StatusOK, task)
+	utils.RespondDeleted(w)
 }

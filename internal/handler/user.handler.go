@@ -8,6 +8,7 @@ import (
 	"kanbano-api/internal/models"
 	"kanbano-api/internal/repository"
 	"kanbano-api/internal/storage"
+	"kanbano-api/internal/utils"
 	"kanbano-api/internal/ws"
 
 	"github.com/google/uuid"
@@ -22,7 +23,7 @@ type UserHandler struct {
 }
 
 type updateMeBody struct {
-	Name string `json:"name"`
+	Name string `json:"name" validate:"required,min=1,max=100"`
 }
 
 // meResponse is the wire shape for /me: the user, plus the avatar URLs when set.
@@ -43,18 +44,14 @@ func (h *UserHandler) Me(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	writeJSON(w, http.StatusOK, h.response(user))
+	utils.RespondJSON(w, http.StatusOK, h.response(user))
 }
 
 func (h *UserHandler) UpdateMe(w http.ResponseWriter, r *http.Request) {
 	userID := userIDFromContext(r)
 
-	body, ok := decodeJSON[updateMeBody](w, r)
+	body, ok := utils.DecodeAndValidate[updateMeBody]("UserHandler.UpdateMe", w, r)
 	if !ok {
-		return
-	}
-	if body.Name == "" {
-		http.Error(w, "invalid request body", http.StatusBadRequest)
 		return
 	}
 
@@ -63,14 +60,15 @@ func (h *UserHandler) UpdateMe(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	h.broadcastAndWrite(w, userID, user, ws.UserUpdated)
+	h.broadcastUser(userID, user, ws.UserUpdated)
+	utils.RespondUpdated(w)
 }
 
 // UploadAvatar accepts a multipart "file" field, generates every avatar
 // derivative, stores them in object storage and points the user at the new version.
 func (h *UserHandler) UploadAvatar(w http.ResponseWriter, r *http.Request) {
 	if h.store == nil {
-		http.Error(w, "avatar storage unavailable", http.StatusServiceUnavailable)
+		utils.RespondError(w, http.StatusServiceUnavailable, "avatar storage unavailable")
 		return
 	}
 
@@ -84,14 +82,14 @@ func (h *UserHandler) UploadAvatar(w http.ResponseWriter, r *http.Request) {
 	r.Body = http.MaxBytesReader(w, r.Body, maxAvatarUpload)
 	file, _, err := r.FormFile("file")
 	if err != nil {
-		http.Error(w, "missing file", http.StatusBadRequest)
+		badRequest(w, "missing file")
 		return
 	}
 	defer file.Close()
 
 	derivatives, err := media.AvatarDerivatives(file)
 	if err != nil {
-		http.Error(w, "invalid image", http.StatusBadRequest)
+		badRequest(w, "invalid image")
 		return
 	}
 
@@ -122,14 +120,15 @@ func (h *UserHandler) UploadAvatar(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 
-	h.broadcastAndWrite(w, userID, user, ws.AvatarUpdated)
+	h.broadcastUser(userID, user, ws.AvatarUpdated)
+	utils.RespondUpdated(w)
 }
 
 // DeleteAvatar removes every stored avatar object for the user and clears the
 // pointer.
 func (h *UserHandler) DeleteAvatar(w http.ResponseWriter, r *http.Request) {
 	if h.store == nil {
-		http.Error(w, "avatar storage unavailable", http.StatusServiceUnavailable)
+		utils.RespondError(w, http.StatusServiceUnavailable, "avatar storage unavailable")
 		return
 	}
 
@@ -145,13 +144,12 @@ func (h *UserHandler) DeleteAvatar(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	h.broadcastAndWrite(w, userID, user, ws.AvatarDeleted)
+	h.broadcastUser(userID, user, ws.AvatarDeleted)
+	utils.RespondDeleted(w)
 }
 
-func (h *UserHandler) broadcastAndWrite(w http.ResponseWriter, userID uuid.UUID, user models.User, event ws.EventType) {
-	resp := h.response(user)
-	h.hub.Broadcast(userID, ws.Event{Type: event, Data: resp})
-	writeJSON(w, http.StatusOK, resp)
+func (h *UserHandler) broadcastUser(userID uuid.UUID, user models.User, event ws.EventType) {
+	h.hub.Broadcast(userID, ws.Event{Type: event, Data: h.response(user)})
 }
 
 func (h *UserHandler) response(user models.User) meResponse {
@@ -159,18 +157,5 @@ func (h *UserHandler) response(user models.User) meResponse {
 }
 
 func (h *UserHandler) avatarSet(user models.User) *models.AvatarSet {
-	if h.store == nil || user.AvatarVersion == nil || *user.AvatarVersion == "" {
-		return nil
-	}
-	version := *user.AvatarVersion
-
-	formats := func(size int) models.AvatarFormats {
-		return models.AvatarFormats{
-			Avif: h.store.URL(media.AvatarObjectKey(user.ID, version, media.FormatAVIF, size)),
-			Webp: h.store.URL(media.AvatarObjectKey(user.ID, version, media.FormatWebP, size)),
-			Png:  h.store.URL(media.AvatarObjectKey(user.ID, version, media.FormatPNG, size)),
-		}
-	}
-
-	return &models.AvatarSet{Size45: formats(45), Size100: formats(100)}
+	return avatarSet(h.store, user.ID, user.AvatarVersion)
 }

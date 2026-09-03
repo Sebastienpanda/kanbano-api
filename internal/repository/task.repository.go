@@ -5,7 +5,6 @@ import (
 	"kanbano-api/internal/models"
 
 	"github.com/google/uuid"
-	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgxpool"
 )
 
@@ -17,47 +16,42 @@ func NewTaskRepository(db *pgxpool.Pool) *TaskRepository {
 	return &TaskRepository{db: db}
 }
 
-func (r *TaskRepository) Create(ctx context.Context, name string, description *string, columnID uuid.UUID, tagID *uuid.UUID, status *string) (models.Task, error) {
-	rows, err := r.db.Query(ctx, `
-		INSERT INTO tasks (name, description, column_id, tag_id, status, position)
-		VALUES ($1, $2, $3, $4, $5, (SELECT COALESCE(MAX(position) + 1, 0) FROM tasks WHERE column_id = $3))
-		RETURNING id, name, description, position, column_id, tag_id, status, created_at, updated_at, deleted_at
+func (r *TaskRepository) Create(ctx context.Context, name string, description *string, columnID uuid.UUID, tagID *uuid.UUID, status *string, createdBy uuid.UUID) (models.Task, error) {
+	return queryStruct[models.Task](ctx, r.db, `
+		INSERT INTO tasks (name, description, column_id, tag_id, status, position, created_by)
+		VALUES ($1, $2, $3, $4, $5, (SELECT COALESCE(MAX(position) + 1, 0) FROM tasks WHERE column_id = $3), $6)
+		RETURNING id, name, description, position, column_id, tag_id, status, created_by, updated_by, deleted_by, created_at, updated_at, deleted_at
 		`,
 		name,
 		description,
 		columnID,
 		tagID,
-		status)
-	if err != nil {
-		return models.Task{}, err
-	}
-	return pgx.CollectOneRow(rows, pgx.RowToStructByName[models.Task])
+		status,
+		createdBy)
 }
 
-func (r *TaskRepository) Update(ctx context.Context, id uuid.UUID, columnID uuid.UUID, name *string, description *string, tagID *uuid.UUID, status *string) (models.Task, error) {
-	rows, err := r.db.Query(ctx, `
+func (r *TaskRepository) Update(ctx context.Context, id uuid.UUID, columnID uuid.UUID, name *string, description *string, tagID *uuid.UUID, status *string, actorID uuid.UUID) (models.Task, error) {
+	return queryStruct[models.Task](ctx, r.db, `
 		UPDATE tasks
 		SET name        = COALESCE($1, name),
 		    description = COALESCE($2, description),
 		    tag_id      = COALESCE($3, tag_id),
 		    status      = COALESCE($4, status),
+		    updated_by  = $7,
 		    updated_at  = NOW()
 		WHERE id = $5 AND column_id = $6 AND deleted_at IS NULL
-		RETURNING id, name, description, position, column_id, tag_id, status, created_at, updated_at, deleted_at
+		RETURNING id, name, description, position, column_id, tag_id, status, created_by, updated_by, deleted_by, created_at, updated_at, deleted_at
 		`,
 		name,
 		description,
 		tagID,
 		status,
 		id,
-		columnID)
-	if err != nil {
-		return models.Task{}, err
-	}
-	return pgx.CollectOneRow(rows, pgx.RowToStructByName[models.Task])
+		columnID,
+		actorID)
 }
 
-func (r *TaskRepository) Reorder(ctx context.Context, id uuid.UUID, columnID uuid.UUID, position *int, newColumnID *uuid.UUID) (models.Task, error) {
+func (r *TaskRepository) Reorder(ctx context.Context, id uuid.UUID, columnID uuid.UUID, position *int, newColumnID *uuid.UUID, actorID uuid.UUID) (models.Task, error) {
 	tx, err := r.db.Begin(ctx)
 	if err != nil {
 		return models.Task{}, err
@@ -87,13 +81,14 @@ func (r *TaskRepository) Reorder(ctx context.Context, id uuid.UUID, columnID uui
 	if targetColumnID != columnID {
 		_, err = tx.Exec(ctx, `
 			UPDATE tasks
-			SET position = position - 1, updated_at = NOW()
-			WHERE column_id = $1 
-			  AND position > $2 
+			SET position = position - 1, updated_by = $3, updated_at = NOW()
+			WHERE column_id = $1
+			  AND position > $2
 			  AND deleted_at IS NULL
 			`,
 			columnID,
-			oldPosition)
+			oldPosition,
+			actorID)
 		if err != nil {
 			return models.Task{}, err
 		}
@@ -115,13 +110,14 @@ func (r *TaskRepository) Reorder(ctx context.Context, id uuid.UUID, columnID uui
 
 		_, err = tx.Exec(ctx, `
 			UPDATE tasks
-			SET position = position + 1, updated_at = NOW()
-			WHERE column_id = $1 
-			  AND position >= $2 
+			SET position = position + 1, updated_by = $3, updated_at = NOW()
+			WHERE column_id = $1
+			  AND position >= $2
 			  AND deleted_at IS NULL
 			`,
 			targetColumnID,
-			newPosition)
+			newPosition,
+			actorID)
 		if err != nil {
 			return models.Task{}, err
 		}
@@ -134,34 +130,36 @@ func (r *TaskRepository) Reorder(ctx context.Context, id uuid.UUID, columnID uui
 			if newPosition < oldPosition {
 				_, err = tx.Exec(ctx, `
 					UPDATE tasks
-					SET position = position + 1, updated_at = NOW()
-					WHERE column_id = $1 
-					  AND id != $2 
-					  AND position >= $3 
-					  AND position < $4 
+					SET position = position + 1, updated_by = $5, updated_at = NOW()
+					WHERE column_id = $1
+					  AND id != $2
+					  AND position >= $3
+					  AND position < $4
 					  AND deleted_at IS NULL
 					`,
 					columnID,
 					id,
 					newPosition,
-					oldPosition)
+					oldPosition,
+					actorID)
 				if err != nil {
 					return models.Task{}, err
 				}
 			} else {
 				_, err = tx.Exec(ctx, `
 					UPDATE tasks
-					SET position = position - 1, updated_at = NOW()
-					WHERE column_id = $1 
-					  AND id != $2 
-					  AND position > $3 
-					  AND position <= $4 
+					SET position = position - 1, updated_by = $5, updated_at = NOW()
+					WHERE column_id = $1
+					  AND id != $2
+					  AND position > $3
+					  AND position <= $4
 					  AND deleted_at IS NULL
 					`,
 					columnID,
 					id,
 					oldPosition,
-					newPosition)
+					newPosition,
+					actorID)
 				if err != nil {
 					return models.Task{}, err
 				}
@@ -169,22 +167,20 @@ func (r *TaskRepository) Reorder(ctx context.Context, id uuid.UUID, columnID uui
 		}
 	}
 
-	rows, err := tx.Query(ctx, `
+	task, err := queryStruct[models.Task](ctx, tx, `
 		UPDATE tasks
 		SET position   = $1,
 		    column_id  = $2,
+		    updated_by = $4,
 		    updated_at = NOW()
 		WHERE id = $3
 		  AND deleted_at IS NULL
-		RETURNING id, name, description, position, column_id, tag_id, status, created_at, updated_at, deleted_at
+		RETURNING id, name, description, position, column_id, tag_id, status, created_by, updated_by, deleted_by, created_at, updated_at, deleted_at
 		`,
 		newPosition,
 		targetColumnID,
-		id)
-	if err != nil {
-		return models.Task{}, err
-	}
-	task, err := pgx.CollectOneRow(rows, pgx.RowToStructByName[models.Task])
+		id,
+		actorID)
 	if err != nil {
 		return models.Task{}, err
 	}
@@ -197,19 +193,17 @@ func (r *TaskRepository) Reorder(ctx context.Context, id uuid.UUID, columnID uui
 	return task, nil
 }
 
-func (r *TaskRepository) SoftDelete(ctx context.Context, id uuid.UUID, columnID uuid.UUID) (models.Task, error) {
-	rows, err := r.db.Query(ctx, `
+func (r *TaskRepository) SoftDelete(ctx context.Context, id uuid.UUID, columnID uuid.UUID, actorID uuid.UUID) (models.Task, error) {
+	return queryStruct[models.Task](ctx, r.db, `
 		UPDATE tasks
-		SET deleted_at = NOW()
+		SET deleted_at = NOW(),
+		    deleted_by = $3
 		WHERE id = $1
 		  AND column_id = $2
 		  AND deleted_at IS NULL
-		RETURNING id, name, description, position, column_id, tag_id, status, created_at, updated_at, deleted_at
+		RETURNING id, name, description, position, column_id, tag_id, status, created_by, updated_by, deleted_by, created_at, updated_at, deleted_at
 		`,
 		id,
-		columnID)
-	if err != nil {
-		return models.Task{}, err
-	}
-	return pgx.CollectOneRow(rows, pgx.RowToStructByName[models.Task])
+		columnID,
+		actorID)
 }

@@ -24,10 +24,10 @@ const (
 )
 
 type Event struct {
-	Type        EventType `json:"type"`
-	WorkspaceID uuid.UUID `json:"workspace_id"`
-	Data        any       `json:"data,omitempty"`
-	Recent      any       `json:"recent,omitempty"`
+	Type        EventType  `json:"type"`
+	WorkspaceID *uuid.UUID `json:"workspace_id,omitempty"`
+	Data        any        `json:"data,omitempty"`
+	Recent      any        `json:"recent,omitempty"`
 }
 
 type Hub struct {

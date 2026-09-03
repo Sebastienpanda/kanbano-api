@@ -17,18 +17,15 @@ func NewColumnRepository(db *pgxpool.Pool) *ColumnRepository {
 	return &ColumnRepository{db: db}
 }
 
-func (r *ColumnRepository) Create(ctx context.Context, name string, workspaceID uuid.UUID) (models.Column, error) {
-	rows, err := r.db.Query(ctx, `
-		INSERT INTO columns (name, workspace_id, position)
-		VALUES ($1, $2, (SELECT COALESCE(MAX(position) + 1, 0) FROM columns WHERE workspace_id = $2))
-		RETURNING id, name, position, workspace_id, created_at, updated_at, deleted_at
+func (r *ColumnRepository) Create(ctx context.Context, name string, workspaceID uuid.UUID, createdBy uuid.UUID) (models.Column, error) {
+	return queryStruct[models.Column](ctx, r.db, `
+		INSERT INTO columns (name, workspace_id, position, created_by)
+		VALUES ($1, $2, (SELECT COALESCE(MAX(position) + 1, 0) FROM columns WHERE workspace_id = $2), $3)
+		RETURNING id, name, position, workspace_id, created_by, updated_by, deleted_by, created_at, updated_at, deleted_at
 		`,
 		name,
-		workspaceID)
-	if err != nil {
-		return models.Column{}, err
-	}
-	return pgx.CollectOneRow(rows, pgx.RowToStructByName[models.Column])
+		workspaceID,
+		createdBy)
 }
 
 func (r *ColumnRepository) ListNames(ctx context.Context, workspaceID uuid.UUID) ([]models.ColumnName, error) {
@@ -62,26 +59,24 @@ func (r *ColumnRepository) Exists(ctx context.Context, id uuid.UUID, workspaceID
 	return exists, err
 }
 
-func (r *ColumnRepository) Update(ctx context.Context, id uuid.UUID, workspaceID uuid.UUID, name *string) (models.Column, error) {
-	rows, err := r.db.Query(ctx, `
+func (r *ColumnRepository) Update(ctx context.Context, id uuid.UUID, workspaceID uuid.UUID, name *string, actorID uuid.UUID) (models.Column, error) {
+	return queryStruct[models.Column](ctx, r.db, `
 		UPDATE columns
 		SET name       = COALESCE($1, name),
+		    updated_by = $4,
 		    updated_at = NOW()
 		WHERE id = $2
 		  AND workspace_id = $3
 		  AND deleted_at IS NULL
-		RETURNING id, name, position, workspace_id, created_at, updated_at, deleted_at
+		RETURNING id, name, position, workspace_id, created_by, updated_by, deleted_by, created_at, updated_at, deleted_at
 		`,
 		name,
 		id,
-		workspaceID)
-	if err != nil {
-		return models.Column{}, err
-	}
-	return pgx.CollectOneRow(rows, pgx.RowToStructByName[models.Column])
+		workspaceID,
+		actorID)
 }
 
-func (r *ColumnRepository) Reorder(ctx context.Context, id uuid.UUID, workspaceID uuid.UUID, position int) (models.Column, error) {
+func (r *ColumnRepository) Reorder(ctx context.Context, id uuid.UUID, workspaceID uuid.UUID, position int, actorID uuid.UUID) (models.Column, error) {
 	tx, err := r.db.Begin(ctx)
 	if err != nil {
 		return models.Column{}, err
@@ -108,52 +103,52 @@ func (r *ColumnRepository) Reorder(ctx context.Context, id uuid.UUID, workspaceI
 		if position < oldPosition {
 			_, err = tx.Exec(ctx, `
 				UPDATE columns
-				SET position = position + 1, updated_at = NOW()
-				WHERE workspace_id = $1 
-				  AND id != $2 
-				  AND position >= $3 
-				  AND position < $4 
+				SET position = position + 1, updated_by = $5, updated_at = NOW()
+				WHERE workspace_id = $1
+				  AND id != $2
+				  AND position >= $3
+				  AND position < $4
 				  AND deleted_at IS NULL
 				`,
 				workspaceID,
 				id,
 				position,
-				oldPosition)
+				oldPosition,
+				actorID)
 			if err != nil {
 				return models.Column{}, err
 			}
 		} else {
 			_, err = tx.Exec(ctx, `
 				UPDATE columns
-				SET position = position - 1, updated_at = NOW()
+				SET position = position - 1, updated_by = $5, updated_at = NOW()
 				WHERE workspace_id = $1 AND id != $2 AND position > $3 AND position <= $4 AND deleted_at IS NULL
 				`,
 				workspaceID,
 				id,
 				oldPosition,
-				position)
+				position,
+				actorID)
 			if err != nil {
 				return models.Column{}, err
 			}
 		}
 	}
 
-	rows, err := tx.Query(ctx, `
+	column, err := queryStruct[models.Column](ctx, tx, `
 		UPDATE columns
 		SET position   = $1,
+		    updated_by = $4,
 		    updated_at = NOW()
 		WHERE id = $2
 		  AND workspace_id = $3
 		  AND deleted_at IS NULL
-		RETURNING id, name, position, workspace_id, created_at, updated_at, deleted_at
+		RETURNING id, name, position, workspace_id, created_by, updated_by, deleted_by, created_at, updated_at, deleted_at
 		`,
 		position,
 		id,
-		workspaceID)
-	if err != nil {
-		return models.Column{}, err
-	}
-	column, err := pgx.CollectOneRow(rows, pgx.RowToStructByName[models.Column])
+		workspaceID,
+		actorID)
 	if err != nil {
 		return models.Column{}, err
 	}
@@ -166,38 +161,38 @@ func (r *ColumnRepository) Reorder(ctx context.Context, id uuid.UUID, workspaceI
 	return column, nil
 }
 
-func (r *ColumnRepository) SoftDelete(ctx context.Context, id uuid.UUID, workspaceID uuid.UUID) (models.Column, error) {
+func (r *ColumnRepository) SoftDelete(ctx context.Context, id uuid.UUID, workspaceID uuid.UUID, actorID uuid.UUID) (models.Column, error) {
 	tx, err := r.db.Begin(ctx)
 	if err != nil {
 		return models.Column{}, err
 	}
 	defer tx.Rollback(ctx)
 
-	rows, err := tx.Query(ctx, `
+	column, err := queryStruct[models.Column](ctx, tx, `
 		UPDATE columns
-		SET deleted_at = NOW()
+		SET deleted_at = NOW(),
+		    deleted_by = $3
 		WHERE id = $1
 		  AND workspace_id = $2
 		  AND deleted_at IS NULL
-		RETURNING id, name, position, workspace_id, created_at, updated_at, deleted_at
+		RETURNING id, name, position, workspace_id, created_by, updated_by, deleted_by, created_at, updated_at, deleted_at
 		`,
 		id,
-		workspaceID)
-	if err != nil {
-		return models.Column{}, err
-	}
-	column, err := pgx.CollectOneRow(rows, pgx.RowToStructByName[models.Column])
+		workspaceID,
+		actorID)
 	if err != nil {
 		return models.Column{}, err
 	}
 
 	_, err = tx.Exec(ctx, `
 		UPDATE tasks
-		SET deleted_at = NOW()
-		WHERE column_id = $1 
+		SET deleted_at = NOW(),
+		    deleted_by = $2
+		WHERE column_id = $1
 		  AND deleted_at IS NULL
 		`,
-		id)
+		id,
+		actorID)
 	if err != nil {
 		return models.Column{}, err
 	}

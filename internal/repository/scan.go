@@ -6,6 +6,9 @@ import (
 	"github.com/google/uuid"
 )
 
+// Helpers de déréférencement utilisés pour le scan manuel des LEFT JOIN
+// (colonnes nullable) dans WorkspaceRepository.GetByID.
+
 func derefStr(s *string) string {
 	if s == nil {
 		return ""

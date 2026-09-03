@@ -3,6 +3,7 @@ package handler
 import (
 	"context"
 	"kanbano-api/internal/repository"
+	"kanbano-api/internal/utils"
 	"kanbano-api/internal/ws"
 	"log"
 	"net/http"
@@ -17,13 +18,13 @@ type WorkspaceHandler struct {
 }
 
 type createWorkspaceBody struct {
-	Name        string  `json:"name"`
-	Description *string `json:"description"`
+	Name        string  `json:"name" validate:"required,min=1,max=100"`
+	Description *string `json:"description" validate:"omitempty,max=2000"`
 }
 
 type updateWorkspaceBody struct {
-	Name        *string `json:"name"`
-	Description *string `json:"description"`
+	Name        *string `json:"name" validate:"omitempty,min=1,max=100"`
+	Description *string `json:"description" validate:"omitempty,max=2000"`
 }
 
 func NewWorkspaceHandler(repo *repository.WorkspaceRepository, hub *ws.Hub) *WorkspaceHandler {
@@ -39,7 +40,7 @@ func (h *WorkspaceHandler) List(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	writeJSON(w, http.StatusOK, workspaces)
+	utils.RespondJSON(w, http.StatusOK, workspaces)
 }
 
 func (h *WorkspaceHandler) Recent(w http.ResponseWriter, r *http.Request) {
@@ -51,7 +52,7 @@ func (h *WorkspaceHandler) Recent(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	writeJSON(w, http.StatusOK, workspaces)
+	utils.RespondJSON(w, http.StatusOK, workspaces)
 }
 
 func (h *WorkspaceHandler) Names(w http.ResponseWriter, r *http.Request) {
@@ -63,7 +64,7 @@ func (h *WorkspaceHandler) Names(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	writeJSON(w, http.StatusOK, names)
+	utils.RespondJSON(w, http.StatusOK, names)
 }
 
 func (h *WorkspaceHandler) Search(w http.ResponseWriter, r *http.Request) {
@@ -71,7 +72,7 @@ func (h *WorkspaceHandler) Search(w http.ResponseWriter, r *http.Request) {
 
 	query := strings.TrimSpace(r.URL.Query().Get("q"))
 	if query == "" {
-		http.Error(w, "missing query parameter q", http.StatusBadRequest)
+		badRequest(w, "missing query parameter q")
 		return
 	}
 
@@ -81,7 +82,7 @@ func (h *WorkspaceHandler) Search(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	writeJSON(w, http.StatusOK, results)
+	utils.RespondJSON(w, http.StatusOK, results)
 }
 
 func (h *WorkspaceHandler) recentOrNil(ctx context.Context, userID uuid.UUID) any {
@@ -96,25 +97,23 @@ func (h *WorkspaceHandler) recentOrNil(ctx context.Context, userID uuid.UUID) an
 func (h *WorkspaceHandler) Create(w http.ResponseWriter, r *http.Request) {
 	userID := userIDFromContext(r)
 
-	body, ok := decodeJSON[createWorkspaceBody](w, r)
+	body, ok := utils.DecodeAndValidate[createWorkspaceBody]("WorkspaceHandler.Create", w, r)
 	if !ok {
-		return
-	}
-	if body.Name == "" {
-		http.Error(w, "invalid request body", http.StatusBadRequest)
 		return
 	}
 
 	workspace, err := h.repo.Create(r.Context(), body.Name, body.Description, userID)
-	if err == nil {
-		h.hub.Broadcast(userID, ws.Event{
-			Type:        ws.WorkspaceCreated,
-			WorkspaceID: workspace.ID,
-			Data:        workspace,
-			Recent:      h.recentOrNil(r.Context(), userID),
-		})
+	if err != nil {
+		serverError(w, err)
+		return
 	}
-	respondCreated(w, workspace, err)
+	h.hub.Broadcast(userID, ws.Event{
+		Type:        ws.WorkspaceCreated,
+		WorkspaceID: &workspace.ID,
+		Data:        workspace,
+		Recent:      h.recentOrNil(r.Context(), userID),
+	})
+	utils.RespondCreated(w, &workspace.ID)
 }
 
 func (h *WorkspaceHandler) Get(w http.ResponseWriter, r *http.Request) {
@@ -130,7 +129,7 @@ func (h *WorkspaceHandler) Get(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	writeJSON(w, http.StatusOK, detail)
+	utils.RespondJSON(w, http.StatusOK, detail)
 }
 
 func (h *WorkspaceHandler) Update(w http.ResponseWriter, r *http.Request) {
@@ -141,7 +140,7 @@ func (h *WorkspaceHandler) Update(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	body, ok := decodeJSON[updateWorkspaceBody](w, r)
+	body, ok := utils.DecodeAndValidate[updateWorkspaceBody]("WorkspaceHandler.Update", w, r)
 	if !ok {
 		return
 	}
@@ -151,8 +150,8 @@ func (h *WorkspaceHandler) Update(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	h.hub.Broadcast(userID, ws.Event{Type: ws.WorkspaceUpdated, WorkspaceID: workspace.ID, Data: workspace})
-	writeJSON(w, http.StatusOK, workspace)
+	h.hub.Broadcast(userID, ws.Event{Type: ws.WorkspaceUpdated, WorkspaceID: &workspace.ID, Data: workspace})
+	utils.RespondUpdated(w)
 }
 
 func (h *WorkspaceHandler) Delete(w http.ResponseWriter, r *http.Request) {
@@ -170,7 +169,7 @@ func (h *WorkspaceHandler) Delete(w http.ResponseWriter, r *http.Request) {
 
 	h.hub.Broadcast(userID, ws.Event{
 		Type:        ws.WorkspaceDeleted,
-		WorkspaceID: workspace.ID,
+		WorkspaceID: &workspace.ID,
 	})
-	writeJSON(w, http.StatusOK, workspace)
+	utils.RespondDeleted(w)
 }

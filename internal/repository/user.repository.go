@@ -5,7 +5,6 @@ import (
 	"kanbano-api/internal/models"
 
 	"github.com/google/uuid"
-	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgxpool"
 )
 
@@ -18,20 +17,16 @@ func NewUserRepository(db *pgxpool.Pool) *UserRepository {
 }
 
 func (r *UserRepository) GetByID(ctx context.Context, id uuid.UUID) (models.User, error) {
-	rows, err := r.db.Query(ctx, `
+	return queryStruct[models.User](ctx, r.db, `
 		SELECT id, email, name, created_at, avatar_version, avatar_updated_at
 		FROM users
 		WHERE id = $1
 		`,
 		id)
-	if err != nil {
-		return models.User{}, err
-	}
-	return pgx.CollectOneRow(rows, pgx.RowToStructByName[models.User])
 }
 
 func (r *UserRepository) UpdateName(ctx context.Context, id uuid.UUID, name string) (models.User, error) {
-	rows, err := r.db.Query(ctx, `
+	return queryStruct[models.User](ctx, r.db, `
 		UPDATE users
 		SET name = $1
 		WHERE id = $2
@@ -39,14 +34,10 @@ func (r *UserRepository) UpdateName(ctx context.Context, id uuid.UUID, name stri
 		`,
 		name,
 		id)
-	if err != nil {
-		return models.User{}, err
-	}
-	return pgx.CollectOneRow(rows, pgx.RowToStructByName[models.User])
 }
 
 func (r *UserRepository) SetAvatar(ctx context.Context, id uuid.UUID, version string) (models.User, error) {
-	rows, err := r.db.Query(ctx, `
+	return queryStruct[models.User](ctx, r.db, `
 		UPDATE users
 		SET avatar_version    = $1,
 		    avatar_updated_at = NOW()
@@ -55,14 +46,10 @@ func (r *UserRepository) SetAvatar(ctx context.Context, id uuid.UUID, version st
 		`,
 		version,
 		id)
-	if err != nil {
-		return models.User{}, err
-	}
-	return pgx.CollectOneRow(rows, pgx.RowToStructByName[models.User])
 }
 
 func (r *UserRepository) ClearAvatar(ctx context.Context, id uuid.UUID) (models.User, error) {
-	rows, err := r.db.Query(ctx, `
+	return queryStruct[models.User](ctx, r.db, `
 		UPDATE users
 		SET avatar_version    = NULL,
 		    avatar_updated_at  = NULL
@@ -70,8 +57,4 @@ func (r *UserRepository) ClearAvatar(ctx context.Context, id uuid.UUID) (models.
 		RETURNING id, email, name, created_at, avatar_version, avatar_updated_at
 		`,
 		id)
-	if err != nil {
-		return models.User{}, err
-	}
-	return pgx.CollectOneRow(rows, pgx.RowToStructByName[models.User])
 }

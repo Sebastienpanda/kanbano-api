@@ -2,6 +2,7 @@ package handler
 
 import (
 	"kanbano-api/internal/repository"
+	"kanbano-api/internal/utils"
 	"net/http"
 )
 
@@ -10,13 +11,13 @@ type TagHandler struct {
 }
 
 type createTagBody struct {
-	Name  string  `json:"name"`
-	Color *string `json:"color"`
+	Name  string  `json:"name" validate:"required,min=1,max=50"`
+	Color *string `json:"color" validate:"omitempty,max=50"`
 }
 
 type updateTagBody struct {
-	Name  *string `json:"name"`
-	Color *string `json:"color"`
+	Name  *string `json:"name" validate:"omitempty,min=1,max=50"`
+	Color *string `json:"color" validate:"omitempty,max=50"`
 }
 
 func NewTagHandler(repo *repository.TagRepository) *TagHandler {
@@ -32,23 +33,23 @@ func (h *TagHandler) List(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	writeJSON(w, http.StatusOK, tags)
+	utils.RespondJSON(w, http.StatusOK, tags)
 }
 
 func (h *TagHandler) Create(w http.ResponseWriter, r *http.Request) {
 	userID := userIDFromContext(r)
 
-	body, ok := decodeJSON[createTagBody](w, r)
+	body, ok := utils.DecodeAndValidate[createTagBody]("TagHandler.Create", w, r)
 	if !ok {
-		return
-	}
-	if body.Name == "" {
-		http.Error(w, "invalid request body", http.StatusBadRequest)
 		return
 	}
 
 	tag, err := h.repo.Create(r.Context(), body.Name, body.Color, userID)
-	respondCreated(w, tag, err)
+	if err != nil {
+		serverError(w, err)
+		return
+	}
+	utils.RespondCreated(w, &tag.ID)
 }
 
 func (h *TagHandler) Update(w http.ResponseWriter, r *http.Request) {
@@ -59,15 +60,15 @@ func (h *TagHandler) Update(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	body, ok := decodeJSON[updateTagBody](w, r)
+	body, ok := utils.DecodeAndValidate[updateTagBody]("TagHandler.Update", w, r)
 	if !ok {
 		return
 	}
 
-	tag, err := h.repo.Update(r.Context(), tagID, userID, body.Name, body.Color)
+	_, err := h.repo.Update(r.Context(), tagID, userID, body.Name, body.Color)
 	if handleRepoError(w, err, "tag not found") {
 		return
 	}
 
-	writeJSON(w, http.StatusOK, tag)
+	utils.RespondUpdated(w)
 }
