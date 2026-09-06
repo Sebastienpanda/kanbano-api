@@ -32,7 +32,7 @@ func requireWorkspace(w http.ResponseWriter, r *http.Request, workspaceRepo *rep
 
 	exists, err := workspaceRepo.Exists(r.Context(), workspaceID, userID)
 	if err != nil {
-		serverError(w, err)
+		serverError(w, r, err)
 		return userID, workspaceID, false
 	}
 	if !exists {

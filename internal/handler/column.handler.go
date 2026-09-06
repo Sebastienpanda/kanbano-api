@@ -49,13 +49,13 @@ func (h *ColumnHandler) NamesByWorkspaceName(w http.ResponseWriter, r *http.Requ
 			notFound(w, "workspace not found")
 			return
 		}
-		serverError(w, err)
+		serverError(w, r, err)
 		return
 	}
 
 	names, err := h.repo.ListNames(r.Context(), workspaceID)
 	if err != nil {
-		serverError(w, err)
+		serverError(w, r, err)
 		return
 	}
 
@@ -83,8 +83,8 @@ func (h *ColumnHandler) broadcastColumn(userID, workspaceID uuid.UUID, eventType
 // applyColumnChange handles the common tail of Update/Reorder/Delete: turn a repo
 // error into a 404/500, otherwise broadcast the change (WS carries the payload).
 // Returns true when the change succeeded and the caller should send its ack.
-func (h *ColumnHandler) applyColumnChange(w http.ResponseWriter, userID, workspaceID uuid.UUID, eventType ws.EventType, column models.Column, err error) bool {
-	if handleRepoError(w, err, "column not found") {
+func (h *ColumnHandler) applyColumnChange(w http.ResponseWriter, r *http.Request, userID, workspaceID uuid.UUID, eventType ws.EventType, column models.Column, err error) bool {
+	if handleRepoError(w, r, err, "column not found") {
 		return false
 	}
 
@@ -105,7 +105,7 @@ func (h *ColumnHandler) Create(w http.ResponseWriter, r *http.Request) {
 
 	column, err := h.repo.Create(r.Context(), body.Name, workspaceID, userID)
 	if err != nil {
-		serverError(w, err)
+		serverError(w, r, err)
 		return
 	}
 	h.broadcastColumn(userID, workspaceID, ws.ColumnCreated, column)
@@ -124,7 +124,7 @@ func (h *ColumnHandler) Update(w http.ResponseWriter, r *http.Request) {
 	}
 
 	column, err := h.repo.Update(r.Context(), columnID, workspaceID, body.Name, userID)
-	if h.applyColumnChange(w, userID, workspaceID, ws.ColumnUpdated, column, err) {
+	if h.applyColumnChange(w, r, userID, workspaceID, ws.ColumnUpdated, column, err) {
 		utils.RespondUpdated(w)
 	}
 }
@@ -141,7 +141,7 @@ func (h *ColumnHandler) Reorder(w http.ResponseWriter, r *http.Request) {
 	}
 
 	column, err := h.repo.Reorder(r.Context(), columnID, workspaceID, body.Position, userID)
-	if h.applyColumnChange(w, userID, workspaceID, ws.ColumnUpdated, column, err) {
+	if h.applyColumnChange(w, r, userID, workspaceID, ws.ColumnUpdated, column, err) {
 		utils.RespondUpdated(w)
 	}
 }
@@ -153,7 +153,7 @@ func (h *ColumnHandler) Delete(w http.ResponseWriter, r *http.Request) {
 	}
 
 	column, err := h.repo.SoftDelete(r.Context(), columnID, workspaceID, userID)
-	if h.applyColumnChange(w, userID, workspaceID, ws.ColumnDeleted, column, err) {
+	if h.applyColumnChange(w, r, userID, workspaceID, ws.ColumnDeleted, column, err) {
 		utils.RespondDeleted(w)
 	}
 }

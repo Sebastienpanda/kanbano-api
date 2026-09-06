@@ -1,6 +1,8 @@
 package routes
 
 import (
+	appmiddleware "kanbano-api/internal/middleware"
+	"kanbano-api/internal/repository"
 	"kanbano-api/internal/storage"
 	"kanbano-api/internal/ws"
 	"os"
@@ -16,8 +18,11 @@ func SetupRouter(pool *pgxpool.Pool, store *storage.Client) *chi.Mux {
 	allowedOrigins := getAllowedOrigins()
 	ws.SetAllowedOrigins(allowedOrigins)
 
+	logRepo := repository.NewLogRepository(pool)
+
 	r := chi.NewRouter()
-	r.Use(middleware.Logger)
+	r.Use(appmiddleware.WithRequestID)
+	r.Use(appmiddleware.NewRequestLogger(logRepo))
 	r.Use(middleware.Recoverer)
 	r.Use(cors.Handler(cors.Options{
 		AllowedOrigins: allowedOrigins,

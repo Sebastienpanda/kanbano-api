@@ -19,6 +19,7 @@ type repositories struct {
 	tag          *repository.TagRepository
 	user         *repository.UserRepository
 	organisation *repository.OrganisationRepository
+	log          *repository.LogRepository
 }
 
 func newRepositories(pool *pgxpool.Pool) repositories {
@@ -29,6 +30,7 @@ func newRepositories(pool *pgxpool.Pool) repositories {
 		tag:          repository.NewTagRepository(pool),
 		user:         repository.NewUserRepository(pool),
 		organisation: repository.NewOrganisationRepository(pool),
+		log:          repository.NewLogRepository(pool),
 	}
 }
 
@@ -41,6 +43,7 @@ type handlers struct {
 	organisation *handler.OrganisationHandler
 	ws           *handler.WSHandler
 	brevo        *handler.BrevoHandler
+	log          *handler.LogHandler
 }
 
 func newHandlers(repos repositories, store *storage.Client, hub *ws.Hub) handlers {
@@ -53,12 +56,14 @@ func newHandlers(repos repositories, store *storage.Client, hub *ws.Hub) handler
 		organisation: handler.NewOrganisationHandler(repos.organisation, store),
 		ws:           handler.NewWSHandler(hub),
 		brevo:        handler.NewBrevoHandler(os.Getenv("BREVO_WEBHOOK_SECRET"), os.Getenv("DISCORD_WEBHOOK_URL")),
+		log:          handler.NewLogHandler(repos.log),
 	}
 }
 
 func RegisterRoutes(r *chi.Mux, pool *pgxpool.Pool, store *storage.Client) {
 	hub := ws.NewHub()
 	repos := newRepositories(pool)
+	handler.InitLogRepository(repos.log)
 	h := newHandlers(repos, store, hub)
 
 	r.Route("/api/v1", func(r chi.Router) {
@@ -72,6 +77,7 @@ func RegisterRoutes(r *chi.Mux, pool *pgxpool.Pool, store *storage.Client) {
 		TagsRoutes(r, h.tag)
 		UsersRoutes(r, h.user)
 		OrganisationRoutes(r, h.organisation)
+		LogRoutes(r, h.log)
 	})
 
 	// /ws s'authentifie lui-même via Sec-WebSocket-Protocol (pas de header Authorization possible côté navigateur)

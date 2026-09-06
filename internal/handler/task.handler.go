@@ -67,7 +67,7 @@ func (h *TaskHandler) resolveTagID(w http.ResponseWriter, r *http.Request, userI
 	if tagID != nil {
 		exists, err := h.tagRepo.Exists(r.Context(), *tagID, userID)
 		if err != nil {
-			serverError(w, err)
+			serverError(w, r, err)
 			return nil, false
 		}
 		if !exists {
@@ -80,7 +80,7 @@ func (h *TaskHandler) resolveTagID(w http.ResponseWriter, r *http.Request, userI
 	if tagName != nil && *tagName != "" {
 		tag, err := h.tagRepo.GetOrCreate(r.Context(), userID, *tagName)
 		if err != nil {
-			serverError(w, err)
+			serverError(w, r, err)
 			return nil, false
 		}
 		return &tag.ID, true
@@ -128,7 +128,7 @@ func (h *TaskHandler) parseTaskContext(w http.ResponseWriter, r *http.Request) (
 
 	colExists, err := h.columnRepo.Exists(r.Context(), columnID, workspaceID)
 	if err != nil {
-		serverError(w, err)
+		serverError(w, r, err)
 		ok = false
 		return
 	}
@@ -163,7 +163,7 @@ func (h *TaskHandler) Create(w http.ResponseWriter, r *http.Request) {
 
 	task, err := h.repo.Create(r.Context(), body.Name, body.Description, columnID, tagID, body.Status, userID)
 	if err != nil {
-		serverError(w, err)
+		serverError(w, r, err)
 		return
 	}
 	h.broadcastTask(r.Context(), userID, workspaceID, ws.TaskCreated, task)
@@ -195,7 +195,7 @@ func (h *TaskHandler) Update(w http.ResponseWriter, r *http.Request) {
 	}
 
 	task, err := h.repo.Update(r.Context(), taskID, columnID, body.Name, body.Description, tagID, body.Status, userID)
-	if handleRepoError(w, err, "task not found") {
+	if handleRepoError(w, r, err, "task not found") {
 		return
 	}
 
@@ -227,7 +227,7 @@ func (h *TaskHandler) Reorder(w http.ResponseWriter, r *http.Request) {
 	if body.TargetColumnID != nil {
 		colExists, err := h.columnRepo.Exists(r.Context(), *body.TargetColumnID, workspaceID)
 		if err != nil {
-			serverError(w, err)
+			serverError(w, r, err)
 			return
 		}
 		if !colExists {
@@ -237,7 +237,7 @@ func (h *TaskHandler) Reorder(w http.ResponseWriter, r *http.Request) {
 	}
 
 	_, err := h.repo.Reorder(r.Context(), taskID, columnID, body.Position, body.TargetColumnID, userID)
-	if handleRepoError(w, err, "task not found") {
+	if handleRepoError(w, r, err, "task not found") {
 		return
 	}
 
@@ -256,7 +256,7 @@ func (h *TaskHandler) Delete(w http.ResponseWriter, r *http.Request) {
 	}
 
 	task, err := h.repo.SoftDelete(r.Context(), taskID, columnID, userID)
-	if handleRepoError(w, err, "task not found") {
+	if handleRepoError(w, r, err, "task not found") {
 		return
 	}
 

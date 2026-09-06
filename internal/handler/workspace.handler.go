@@ -36,7 +36,7 @@ func (h *WorkspaceHandler) List(w http.ResponseWriter, r *http.Request) {
 
 	workspaces, err := h.repo.List(r.Context(), userID)
 	if err != nil {
-		serverError(w, err)
+		serverError(w, r, err)
 		return
 	}
 
@@ -48,7 +48,7 @@ func (h *WorkspaceHandler) Recent(w http.ResponseWriter, r *http.Request) {
 
 	workspaces, err := h.repo.ListRecent(r.Context(), userID)
 	if err != nil {
-		serverError(w, err)
+		serverError(w, r, err)
 		return
 	}
 
@@ -60,7 +60,7 @@ func (h *WorkspaceHandler) Names(w http.ResponseWriter, r *http.Request) {
 
 	names, err := h.repo.ListNames(r.Context(), userID)
 	if err != nil {
-		serverError(w, err)
+		serverError(w, r, err)
 		return
 	}
 
@@ -78,7 +78,7 @@ func (h *WorkspaceHandler) Search(w http.ResponseWriter, r *http.Request) {
 
 	results, err := h.repo.Search(r.Context(), userID, query)
 	if err != nil {
-		serverError(w, err)
+		serverError(w, r, err)
 		return
 	}
 
@@ -104,7 +104,7 @@ func (h *WorkspaceHandler) Create(w http.ResponseWriter, r *http.Request) {
 
 	workspace, err := h.repo.Create(r.Context(), body.Name, body.Description, userID)
 	if err != nil {
-		serverError(w, err)
+		serverError(w, r, err)
 		return
 	}
 	h.hub.Broadcast(userID, ws.Event{
@@ -125,7 +125,7 @@ func (h *WorkspaceHandler) Get(w http.ResponseWriter, r *http.Request) {
 	}
 
 	detail, err := h.repo.GetByID(r.Context(), workspaceID, userID)
-	if handleRepoError(w, err, "workspace not found") {
+	if handleRepoError(w, r, err, "workspace not found") {
 		return
 	}
 
@@ -146,7 +146,7 @@ func (h *WorkspaceHandler) Update(w http.ResponseWriter, r *http.Request) {
 	}
 
 	workspace, err := h.repo.Update(r.Context(), workspaceID, userID, body.Name, body.Description)
-	if handleRepoError(w, err, "workspace not found") {
+	if handleRepoError(w, r, err, "workspace not found") {
 		return
 	}
 
@@ -163,7 +163,7 @@ func (h *WorkspaceHandler) Delete(w http.ResponseWriter, r *http.Request) {
 	}
 
 	workspace, err := h.repo.SoftDelete(r.Context(), workspaceID, userID)
-	if handleRepoError(w, err, "workspace not found") {
+	if handleRepoError(w, r, err, "workspace not found") {
 		return
 	}
 
