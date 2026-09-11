@@ -40,7 +40,7 @@ func (h *UserHandler) Me(w http.ResponseWriter, r *http.Request) {
 	userID := userIDFromContext(r)
 
 	user, err := h.repo.GetByID(r.Context(), userID)
-	if handleRepoError(w, err, "user not found") {
+	if handleRepoError(w, r, err, "user not found") {
 		return
 	}
 
@@ -56,7 +56,7 @@ func (h *UserHandler) UpdateMe(w http.ResponseWriter, r *http.Request) {
 	}
 
 	user, err := h.repo.UpdateName(r.Context(), userID, body.Name)
-	if handleRepoError(w, err, "user not found") {
+	if handleRepoError(w, r, err, "user not found") {
 		return
 	}
 
@@ -75,7 +75,7 @@ func (h *UserHandler) UploadAvatar(w http.ResponseWriter, r *http.Request) {
 	userID := userIDFromContext(r)
 
 	current, err := h.repo.GetByID(r.Context(), userID)
-	if handleRepoError(w, err, "user not found") {
+	if handleRepoError(w, r, err, "user not found") {
 		return
 	}
 
@@ -95,7 +95,7 @@ func (h *UserHandler) UploadAvatar(w http.ResponseWriter, r *http.Request) {
 
 	version, err := media.NewVersion()
 	if err != nil {
-		serverError(w, err)
+		serverError(w, r, err)
 		return
 	}
 
@@ -103,13 +103,13 @@ func (h *UserHandler) UploadAvatar(w http.ResponseWriter, r *http.Request) {
 		key := media.AvatarObjectKey(userID, version, d.Format, d.Size)
 		if err := h.store.Put(r.Context(), key, d.Data, d.ContentType); err != nil {
 			_ = h.store.RemovePrefix(r.Context(), media.AvatarVersionPrefix(userID, version))
-			serverError(w, err)
+			serverError(w, r, err)
 			return
 		}
 	}
 
 	user, err := h.repo.SetAvatar(r.Context(), userID, version)
-	if handleRepoError(w, err, "user not found") {
+	if handleRepoError(w, r, err, "user not found") {
 		_ = h.store.RemovePrefix(r.Context(), media.AvatarVersionPrefix(userID, version))
 		return
 	}
@@ -135,12 +135,12 @@ func (h *UserHandler) DeleteAvatar(w http.ResponseWriter, r *http.Request) {
 	userID := userIDFromContext(r)
 
 	if err := h.store.RemovePrefix(r.Context(), media.AvatarUserPrefix(userID)); err != nil {
-		serverError(w, err)
+		serverError(w, r, err)
 		return
 	}
 
 	user, err := h.repo.ClearAvatar(r.Context(), userID)
-	if handleRepoError(w, err, "user not found") {
+	if handleRepoError(w, r, err, "user not found") {
 		return
 	}
 

@@ -29,7 +29,7 @@ func (h *TagHandler) List(w http.ResponseWriter, r *http.Request) {
 
 	tags, err := h.repo.List(r.Context(), userID)
 	if err != nil {
-		serverError(w, err)
+		serverError(w, r, err)
 		return
 	}
 
@@ -46,7 +46,7 @@ func (h *TagHandler) Create(w http.ResponseWriter, r *http.Request) {
 
 	tag, err := h.repo.Create(r.Context(), body.Name, body.Color, userID)
 	if err != nil {
-		serverError(w, err)
+		serverError(w, r, err)
 		return
 	}
 	utils.RespondCreated(w, &tag.ID)
@@ -66,7 +66,7 @@ func (h *TagHandler) Update(w http.ResponseWriter, r *http.Request) {
 	}
 
 	_, err := h.repo.Update(r.Context(), tagID, userID, body.Name, body.Color)
-	if handleRepoError(w, err, "tag not found") {
+	if handleRepoError(w, r, err, "tag not found") {
 		return
 	}
 

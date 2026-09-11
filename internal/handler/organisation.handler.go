@@ -38,7 +38,7 @@ func (h *OrganisationHandler) Get(w http.ResponseWriter, r *http.Request) {
 	userID := userIDFromContext(r)
 
 	organisation, err := h.repo.GetOrganisationWithMembers(r.Context(), userID)
-	if handleRepoError(w, err, "organisation not found") {
+	if handleRepoError(w, r, err, "organisation not found") {
 		return
 	}
 
