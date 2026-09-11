@@ -1,0 +1,13 @@
+{
+  "$schema": "https://schema.railpack.com",
+  "steps": {
+    "install-migrate": {
+      "commands": [
+        "GOBIN=/app/bin go install -tags 'pgx5' github.com/golang-migrate/migrate/v4/cmd/migrate@v4.18.1"
+      ]
+    }
+  },
+  "deploy": {
+    "startCommand": "./bin/migrate -path internal/db/migrations -database \"$DATABASE_URL_MIGRATE\" up && ./bin/server"
+  }
+}

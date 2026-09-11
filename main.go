@@ -16,8 +16,6 @@ func main() {
 
 	_ = godotenv.Load()
 
-	db.RunMigrations()
-
 	pool := db.MustConnectDB()
 	defer pool.Close()
 
