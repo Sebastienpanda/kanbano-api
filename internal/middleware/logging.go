@@ -4,11 +4,10 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"kanbano-api/internal/logging"
 	"kanbano-api/internal/repository"
-	"log"
 	"log/slog"
 	"net/http"
-	"os"
 	"time"
 
 	"github.com/go-chi/chi/v5"
@@ -16,13 +15,10 @@ import (
 	"github.com/google/uuid"
 )
 
-var requestLogger = slog.New(slog.NewJSONHandler(os.Stdout, nil))
+var requestLogger = logging.Logger
 
-var slowRequestThreshold time.Duration = time.Second
+var slowRequestThreshold = time.Second
 
-// InitSlowRequestThreshold sets the latency threshold (in milliseconds)
-// above which a request is persisted as a warning log. Must be called once
-// at startup, before the server starts handling requests.
 func InitSlowRequestThreshold(ms int) {
 	if ms <= 0 {
 		ms = 1000
@@ -115,11 +111,15 @@ func logSlowRequest(logRepo *repository.LogRepository, r *http.Request, latency 
 
 	message := fmt.Sprintf("slow request: %s", latency)
 
+	// context.Background() est volontaire : ce log est fire-and-forget et
+	// doit survivre à la fin de la requête HTTP (r.Context() serait annulé
+	// dès la réponse envoyée, avant l'insertion en base).
+	//nolint:gosec // détachement intentionnel du contexte requête
 	go func() {
 		ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 		defer cancel()
 		if insertErr := logRepo.Insert(ctx, "warning", message, source, userID, requestID, metadata); insertErr != nil {
-			log.Printf("warning: failed to persist slow request log: %v", insertErr)
+			logging.Logger.Error("failed to persist slow request log", slog.Any("error", insertErr))
 		}
 	}()
 }

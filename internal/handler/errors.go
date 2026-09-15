@@ -3,10 +3,11 @@ package handler
 import (
 	"context"
 	"errors"
+	"kanbano-api/internal/logging"
 	"kanbano-api/internal/middleware"
 	"kanbano-api/internal/repository"
 	"kanbano-api/internal/utils"
-	"log"
+	"log/slog"
 	"net/http"
 	"time"
 
@@ -17,8 +18,6 @@ import (
 
 var logRepo *repository.LogRepository
 
-// InitLogRepository wires the repository used to persist error/warning logs.
-// Must be called once at startup, before the server starts handling requests.
 func InitLogRepository(repo *repository.LogRepository) {
 	logRepo = repo
 }
@@ -31,14 +30,20 @@ func notFound(w http.ResponseWriter, msg string) {
 	utils.RespondError(w, http.StatusNotFound, msg)
 }
 
+func conflict(w http.ResponseWriter, msg string) {
+	utils.RespondError(w, http.StatusConflict, msg)
+}
+
+func unprocessableEntity(w http.ResponseWriter, msg string) {
+	utils.RespondError(w, http.StatusUnprocessableEntity, msg)
+}
+
 func serverError(w http.ResponseWriter, r *http.Request, err error) {
-	log.Printf("internal server error: %v", err)
+	logging.Logger.Error("internal server error", slog.Any("error", err))
 	logRequestError(r, err)
 	utils.RespondError(w, http.StatusInternalServerError, "internal server error")
 }
 
-// logRequestError persists an error-level log entry asynchronously. It must
-// not use r.Context() since it is cancelled once the response is written.
 func logRequestError(r *http.Request, err error) {
 	if logRepo == nil {
 		return
@@ -48,12 +53,23 @@ func logRequestError(r *http.Request, err error) {
 	userID := userIDFromRequestContext(r)
 	requestID := requestIDFromRequest(r)
 
-	go func() {
+	safeGo(func() {
 		ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 		defer cancel()
 		if insertErr := logRepo.Insert(ctx, "error", err.Error(), source, userID, requestID, nil); insertErr != nil {
-			log.Printf("warning: failed to persist error log: %v", insertErr)
+			logging.Logger.Error("failed to persist error log", slog.Any("error", insertErr))
 		}
+	})
+}
+
+func safeGo(fn func()) {
+	go func() {
+		defer func() {
+			if p := recover(); p != nil {
+				logging.Logger.Error("recovered panic in background task", slog.Any("panic", p))
+			}
+		}()
+		fn()
 	}()
 }
 
@@ -83,8 +99,6 @@ func requestIDFromRequest(r *http.Request) *uuid.UUID {
 	return middleware.RequestIDFromContext(r.Context())
 }
 
-// handleRepoError turns a repository error into a 404 (pgx.ErrNoRows) or 500.
-// Returns true when an error was handled and the caller should stop.
 func handleRepoError(w http.ResponseWriter, r *http.Request, err error, notFoundMsg string) bool {
 	if err == nil {
 		return false

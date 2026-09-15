@@ -3,7 +3,8 @@ package server
 import (
 	"context"
 	"errors"
-	"log"
+	"kanbano-api/internal/logging"
+	"log/slog"
 	"net/http"
 	"os"
 	"os/signal"
@@ -17,12 +18,17 @@ func Run(r http.Handler) {
 		port = "3000"
 	}
 
-	srv := &http.Server{Addr: ":" + port, Handler: r}
+	srv := &http.Server{
+		Addr:              ":" + port,
+		Handler:           r,
+		ReadHeaderTimeout: 10 * time.Second,
+	}
 
 	go func() {
-		log.Printf("server listening on port %s", port)
+		logging.Logger.Info("server listening", slog.String("port", port))
 		if err := srv.ListenAndServe(); err != nil && !errors.Is(err, http.ErrServerClosed) {
-			log.Fatalf("server error: %v", err)
+			logging.Logger.Error("server error", slog.Any("error", err))
+			os.Exit(1)
 		}
 	}()
 
@@ -30,13 +36,13 @@ func Run(r http.Handler) {
 	signal.Notify(stop, os.Interrupt, syscall.SIGTERM)
 	<-stop
 
-	log.Println("shutting down...")
+	logging.Logger.Info("shutting down")
 	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 	defer cancel()
 
 	if err := srv.Shutdown(ctx); err != nil {
-		log.Printf("graceful shutdown failed: %v", err)
+		logging.Logger.Error("graceful shutdown failed", slog.Any("error", err))
 	} else {
-		log.Println("server stopped gracefully")
+		logging.Logger.Info("server stopped gracefully")
 	}
 }

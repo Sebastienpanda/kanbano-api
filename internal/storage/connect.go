@@ -2,7 +2,8 @@ package storage
 
 import (
 	"context"
-	"log"
+	"kanbano-api/internal/logging"
+	"log/slog"
 	"os"
 	"strconv"
 )
@@ -20,9 +21,9 @@ func ConnectStorage() *Client {
 		UseSSL:        useSSL,
 	})
 	if err != nil {
-		log.Printf("object storage unavailable, avatar endpoints disabled: %v", err)
+		logging.Logger.Warn("object storage unavailable, avatar endpoints disabled", slog.Any("error", err))
 		return nil
 	}
-	log.Println("object storage connected")
+	logging.Logger.Info("object storage connected")
 	return store
 }

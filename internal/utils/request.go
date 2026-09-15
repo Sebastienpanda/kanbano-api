@@ -5,23 +5,24 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
-	"log"
+	"kanbano-api/internal/logging"
+	"log/slog"
 	"net/http"
 )
 
-func DecodeJsonBody[T any](fn string, w http.ResponseWriter, r *http.Request) (*T, error) {
+func DecodeJSONBody[T any](fn string, w http.ResponseWriter, r *http.Request) (*T, error) {
 	contentType := r.Header.Get("Content-Type")
 	if contentType != "application/json" {
-		log.Printf("%s: unexpected content-type %q", fn, contentType)
+		logging.Logger.Warn("unexpected content-type", slog.String("fn", fn), slog.String("content_type", contentType))
 		RespondError(w, http.StatusUnsupportedMediaType, "unexpected content-type")
 		return nil, fmt.Errorf("unexpected content-type %q", contentType)
 	}
 
 	buf, err := io.ReadAll(r.Body)
 	if err != nil {
-		log.Printf("%s: could not read body: %v", fn, err)
+		logging.Logger.Warn("could not read body", slog.String("fn", fn), slog.Any("error", err))
 		RespondError(w, http.StatusBadRequest, "could not read body")
-		return nil, fmt.Errorf("could not read body: %v", err)
+		return nil, fmt.Errorf("could not read body: %w", err)
 	}
 
 	dec := json.NewDecoder(bytes.NewReader(buf))
@@ -30,16 +31,16 @@ func DecodeJsonBody[T any](fn string, w http.ResponseWriter, r *http.Request) (*
 	var req T
 	err = dec.Decode(&req)
 	if err != nil {
-		log.Printf("%s: could not decode body: %v", fn, err)
+		logging.Logger.Warn("could not decode body", slog.String("fn", fn), slog.Any("error", err))
 		RespondError(w, http.StatusBadRequest, "could not decode body")
-		return nil, fmt.Errorf("could not decode body: %v", err)
+		return nil, fmt.Errorf("could not decode body: %w", err)
 	}
 
 	return &req, nil
 }
 
 func DecodeAndValidate[T any](fn string, w http.ResponseWriter, r *http.Request) (T, bool) {
-	body, err := DecodeJsonBody[T](fn, w, r)
+	body, err := DecodeJSONBody[T](fn, w, r)
 	if err != nil {
 		var zero T
 		return zero, false
