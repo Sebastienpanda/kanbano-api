@@ -1,0 +1,145 @@
+version: "2"
+run:
+  concurrency: 4
+  timeout: 5m
+  tests: true
+
+issues:
+  max-issues-per-linter: 0
+  max-same-issues: 50
+
+linters:
+  enable:
+    # correctness
+    - govet
+    - staticcheck
+    - unused
+    - errcheck
+    - errorlint
+    - nilerr
+    - forcetypeassert
+    - copyloopvar
+    - durationcheck
+    # style (léger)
+    - gocritic
+    - revive
+    - whitespace
+    - misspell
+    - predeclared
+    - errname
+    # complexity (garde-fou seulement)
+    - gocyclo
+    # performance
+    - unconvert
+    - ineffassign
+    - goconst
+    # security & resources — sensible avec pgx/S3/HTTP
+    - gosec
+    - bodyclose
+    - noctx
+    - sqlclosecheck
+    - rowserrcheck
+    # logging (le projet utilise log/slog)
+    - sloglint
+    # modernization
+    - intrange
+    - usestdlibvars
+    - nolintlint
+
+  disable:
+    - lll
+    - prealloc
+    - wrapcheck
+    - err113
+    - mnd
+    - iface
+    - nakedret
+    - noinlineerr
+    - gocognit
+    - cyclop
+    - depguard
+    - goheader
+    - importas
+    - funcorder
+    - godoclint
+    - varnamelen
+    - exhaustruct
+    - gochecknoglobals
+    - gochecknoinits
+    - unparam
+    - makezero
+    - testpackage
+    - embeddedstructfieldcheck
+    - iotamixing
+    - unqueryvet
+    - recvcheck
+    - mirror
+    - protogetter
+    - spancheck
+    - zerologlint
+    # style trop bruyant pour un projet de cette taille
+    - wsl_v5
+    - godot
+    - dupword
+    - asciicheck
+    - bidichk
+    - nestif
+    - funlen
+    - dupl
+    - perfsprint
+    - reassign
+    - containedctx
+    - fatcontext
+    - loggercheck
+    - exhaustive
+    - modernize
+    - exptostd
+    # linters de tests — pas de tests dans le repo pour l'instant
+    - testifylint
+    - thelper
+    - usetesting
+    - paralleltest
+
+  exclusions:
+    paths:
+      - vendor$
+      - third_party$
+      - testutils$
+      - examples$
+    rules:
+      # ce projet ne documente pas systématiquement les symboles exportés
+      # ni les packages (pas une convention actuelle) — évite le bruit sur
+      # l'existant ; les autres règles revive par défaut restent actives.
+      - linters:
+          - revive
+        text: "exported (function|method|type|const|var) .* should have comment"
+      - linters:
+          - revive
+        text: "package-comments: should have a package comment"
+
+  settings:
+    errcheck:
+      check-type-assertions: true
+    goconst:
+      min-len: 3
+      min-occurrences: 4
+    gocyclo:
+      min-complexity: 15
+    nolintlint:
+      require-explanation: true
+      require-specific: true
+
+formatters:
+  enable:
+    - gofumpt
+    - goimports
+  settings:
+    gofumpt:
+      extra:
+        group-params: true
+  exclusions:
+    generated: lax
+    paths:
+      - third_party$
+      - builtin$
+      - examples$

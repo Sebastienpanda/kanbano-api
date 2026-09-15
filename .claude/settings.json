@@ -1,0 +1,17 @@
+{
+  "hooks": {
+    "PostToolUse": [
+      {
+        "matcher": "Write|Edit",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "node -e \"let d='';process.stdin.on('data',c=>d+=c);process.stdin.on('end',()=>{try{const j=JSON.parse(d);const f=(j.tool_response&&j.tool_response.filePath)||(j.tool_input&&j.tool_input.file_path);if(f)process.stdout.write(f)}catch(e){}})\" | { read -r f; case \"$f\" in *.go) dir=$(dirname \"$f\"); golangci-lint run --fix \"$dir/...\" 2>&1 | tail -40 ;; esac; } || true",
+            "timeout": 45,
+            "statusMessage": "golangci-lint --fix (package)"
+          }
+        ]
+      }
+    ]
+  }
+}
