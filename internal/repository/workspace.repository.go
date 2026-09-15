@@ -18,25 +18,37 @@ func NewWorkspaceRepository(db *pgxpool.Pool) *WorkspaceRepository {
 	return &WorkspaceRepository{db: db}
 }
 
-func (r *WorkspaceRepository) List(ctx context.Context, userID uuid.UUID) ([]models.Workspace, error) {
+func (r *WorkspaceRepository) List(ctx context.Context, userID uuid.UUID, limit, offset int) ([]models.Workspace, error) {
 	rows, err := r.db.Query(ctx, `
+		WITH accessible_workspaces AS (
+			SELECT id FROM workspaces WHERE created_by = $1
+			UNION
+			SELECT workspace_id FROM access_grants WHERE member_id = $1
+			UNION
+			SELECT w.id FROM workspaces w
+			JOIN organisation_members om ON om.organisation_id = w.organisation_id
+			WHERE om.member_id = $1
+		)
 		SELECT
-			id,
-			name,
-			description,
-			organisation_id,
-			created_by,
-			updated_by,
-			deleted_by,
-			created_at,
-			updated_at,
-			deleted_at
-		FROM workspaces
-		WHERE created_by = $1
-		  AND deleted_at IS NULL
-		ORDER BY COALESCE(updated_at, created_at) DESC
+			w.id,
+			w.name,
+			w.description,
+			w.organisation_id,
+			w.created_by,
+			w.updated_by,
+			w.deleted_by,
+			w.created_at,
+			w.updated_at,
+			w.deleted_at
+		FROM workspaces w
+		JOIN accessible_workspaces aw ON aw.id = w.id
+		WHERE w.deleted_at IS NULL
+		ORDER BY COALESCE(w.updated_at, w.created_at) DESC
+		LIMIT $2 OFFSET $3
 		`,
-		userID)
+		userID,
+		limit,
+		offset)
 	if err != nil {
 		return nil, err
 	}
@@ -45,21 +57,30 @@ func (r *WorkspaceRepository) List(ctx context.Context, userID uuid.UUID) ([]mod
 
 func (r *WorkspaceRepository) ListRecent(ctx context.Context, userID uuid.UUID) ([]models.Workspace, error) {
 	rows, err := r.db.Query(ctx, `
+		WITH accessible_workspaces AS (
+			SELECT id FROM workspaces WHERE created_by = $1
+			UNION
+			SELECT workspace_id FROM access_grants WHERE member_id = $1
+			UNION
+			SELECT w.id FROM workspaces w
+			JOIN organisation_members om ON om.organisation_id = w.organisation_id
+			WHERE om.member_id = $1
+		)
 		SELECT
-			id,
-			name,
-			description,
-			organisation_id,
-			created_by,
-			updated_by,
-			deleted_by,
-			created_at,
-			updated_at,
-			deleted_at
-		FROM workspaces
-		WHERE created_by = $1
-		  AND deleted_at IS NULL
-		ORDER BY COALESCE(updated_at, created_at) DESC
+			w.id,
+			w.name,
+			w.description,
+			w.organisation_id,
+			w.created_by,
+			w.updated_by,
+			w.deleted_by,
+			w.created_at,
+			w.updated_at,
+			w.deleted_at
+		FROM workspaces w
+		JOIN accessible_workspaces aw ON aw.id = w.id
+		WHERE w.deleted_at IS NULL
+		ORDER BY COALESCE(w.updated_at, w.created_at) DESC
 		LIMIT 6
 		`,
 		userID)
@@ -71,13 +92,22 @@ func (r *WorkspaceRepository) ListRecent(ctx context.Context, userID uuid.UUID) 
 
 func (r *WorkspaceRepository) ListNames(ctx context.Context, userID uuid.UUID) ([]models.WorkspaceName, error) {
 	rows, err := r.db.Query(ctx, `
+		WITH accessible_workspaces AS (
+			SELECT id FROM workspaces WHERE created_by = $1
+			UNION
+			SELECT workspace_id FROM access_grants WHERE member_id = $1
+			UNION
+			SELECT w.id FROM workspaces w
+			JOIN organisation_members om ON om.organisation_id = w.organisation_id
+			WHERE om.member_id = $1
+		)
 		SELECT
-			id,
-			name
-		FROM workspaces
-		WHERE created_by = $1
-		  AND deleted_at IS NULL
-		ORDER BY COALESCE(updated_at, created_at) DESC
+			w.id,
+			w.name
+		FROM workspaces w
+		JOIN accessible_workspaces aw ON aw.id = w.id
+		WHERE w.deleted_at IS NULL
+		ORDER BY COALESCE(w.updated_at, w.created_at) DESC
 		`,
 		userID)
 	if err != nil {
@@ -88,15 +118,24 @@ func (r *WorkspaceRepository) ListNames(ctx context.Context, userID uuid.UUID) (
 
 func (r *WorkspaceRepository) Search(ctx context.Context, userID uuid.UUID, query string) ([]models.WorkspaceSearchResult, error) {
 	rows, err := r.db.Query(ctx, `
+		WITH accessible_workspaces AS (
+			SELECT id FROM workspaces WHERE created_by = $1
+			UNION
+			SELECT workspace_id FROM access_grants WHERE member_id = $1
+			UNION
+			SELECT w.id FROM workspaces w
+			JOIN organisation_members om ON om.organisation_id = w.organisation_id
+			WHERE om.member_id = $1
+		)
 		SELECT
-			id,
-			name,
-			description
-		FROM workspaces
-		WHERE created_by = $1
-		  AND deleted_at IS NULL
-		  AND (name ILIKE $2 OR description ILIKE $2)
-		ORDER BY COALESCE(updated_at, created_at) DESC
+			w.id,
+			w.name,
+			w.description
+		FROM workspaces w
+		JOIN accessible_workspaces aw ON aw.id = w.id
+		WHERE w.deleted_at IS NULL
+		  AND (w.name ILIKE $2 OR w.description ILIKE $2)
+		ORDER BY COALESCE(w.updated_at, w.created_at) DESC
 		`,
 		userID,
 		"%"+query+"%")
@@ -104,25 +143,6 @@ func (r *WorkspaceRepository) Search(ctx context.Context, userID uuid.UUID, quer
 		return nil, err
 	}
 	return pgx.CollectRows(rows, pgx.RowToStructByName[models.WorkspaceSearchResult])
-}
-
-func (r *WorkspaceRepository) GetIDByName(ctx context.Context, name string, userID uuid.UUID) (uuid.UUID, error) {
-	var id uuid.UUID
-	row := r.db.QueryRow(ctx, `
-		SELECT
-			id
-		FROM workspaces
-		WHERE name = $1
-		  AND created_by = $2
-		  AND deleted_at IS NULL
-		ORDER BY COALESCE(updated_at, created_at) DESC
-		LIMIT 1
-		`,
-		name,
-		userID)
-
-	err := row.Scan(&id)
-	return id, err
 }
 
 func (r *WorkspaceRepository) Create(ctx context.Context, name string, description *string, userID uuid.UUID) (models.Workspace, error) {
@@ -136,8 +156,17 @@ func (r *WorkspaceRepository) Create(ctx context.Context, name string, descripti
 		userID)
 }
 
-func (r *WorkspaceRepository) GetByID(ctx context.Context, id uuid.UUID, userID uuid.UUID) (models.WorkspaceDetail, error) {
+func (r *WorkspaceRepository) GetByID(ctx context.Context, id, userID uuid.UUID) (models.WorkspaceDetail, error) {
 	rows, err := r.db.Query(ctx, `
+		WITH accessible_workspaces AS (
+			SELECT id FROM workspaces WHERE created_by = $2
+			UNION
+			SELECT workspace_id FROM access_grants WHERE member_id = $2
+			UNION
+			SELECT w.id FROM workspaces w
+			JOIN organisation_members om ON om.organisation_id = w.organisation_id
+			WHERE om.member_id = $2
+		)
 		SELECT
 			w.id,
 			w.name,
@@ -163,8 +192,12 @@ func (r *WorkspaceRepository) GetByID(ctx context.Context, id uuid.UUID, userID 
 			t.updated_at,
 			g.id,
 			g.name,
-			g.color
+			g.color,
+			au.id,
+			au.email,
+			au.avatar_version
 		FROM workspaces w
+		JOIN accessible_workspaces aw ON aw.id = w.id
 		LEFT JOIN columns c
 		    ON c.workspace_id = w.id
 		           AND c.deleted_at IS NULL
@@ -173,12 +206,15 @@ func (r *WorkspaceRepository) GetByID(ctx context.Context, id uuid.UUID, userID 
 		           AND t.deleted_at IS NULL
 		LEFT JOIN tags g
 		    ON g.id = t.tag_id
-		WHERE w.id = $1 
-		  AND w.created_by = $2 
+		LEFT JOIN task_assignees ta
+		    ON ta.task_id = t.id
+		LEFT JOIN users au
+		    ON au.id = ta.member_id
+		WHERE w.id = $1
 		  AND w.deleted_at IS NULL
-		ORDER BY c.position, 
-		         t.position, 
-		         t.created_at 
+		ORDER BY c.position,
+		         t.position,
+		         t.created_at
 		    DESC
 		`,
 		id,
@@ -188,111 +224,163 @@ func (r *WorkspaceRepository) GetByID(ctx context.Context, id uuid.UUID, userID 
 	}
 	defer rows.Close()
 
-	var detail models.WorkspaceDetail
-	columnsMap := make(map[uuid.UUID]*models.ColumnWithTasks)
-	var columnOrder []uuid.UUID
-	initialized := false
-
+	acc := newWorkspaceDetailAccumulator()
 	for rows.Next() {
-		var (
-			wsID                       uuid.UUID
-			wsName                     string
-			wsDesc                     *string
-			wsCreatedAt                time.Time
-			wsUpdatedAt                *time.Time
-			colID, colWsID             *uuid.UUID
-			colCreatedBy               *uuid.UUID
-			colName                    *string
-			colPos                     *int
-			colCreatedAt, colUpdatedAt *time.Time
-			taskID, taskColID          *uuid.UUID
-			taskName                   *string
-			taskDesc                   *string
-			taskPos                    *int
-			taskTagID, taskCreatedBy   *uuid.UUID
-			taskStatus                 *string
-			taskCreatedAt, taskUpdAt   *time.Time
-			tagID                      *uuid.UUID
-			tagName                    *string
-			tagColor                   *string
-		)
-
-		err := rows.Scan(
-			&wsID, &wsName, &wsDesc, &wsCreatedAt, &wsUpdatedAt,
-			&colID, &colName, &colPos, &colWsID, &colCreatedBy, &colCreatedAt, &colUpdatedAt,
-			&taskID, &taskName, &taskDesc, &taskPos, &taskColID, &taskTagID, &taskStatus, &taskCreatedBy, &taskCreatedAt, &taskUpdAt,
-			&tagID, &tagName, &tagColor,
-		)
-		if err != nil {
+		if err := acc.scanRow(rows); err != nil {
 			return models.WorkspaceDetail{}, err
 		}
-
-		if !initialized {
-			detail.ID = wsID
-			detail.Name = wsName
-			detail.Description = wsDesc
-			detail.CreatedAt = wsCreatedAt
-			detail.UpdatedAt = wsUpdatedAt
-			initialized = true
-		}
-
-		if colID == nil {
-			continue
-		}
-
-		if _, exists := columnsMap[*colID]; !exists {
-			col := models.ColumnWithTasks{
-				ID:        *colID,
-				Name:      derefStr(colName),
-				Position:  derefInt(colPos),
-				CreatedBy: derefUUID(colCreatedBy),
-				CreatedAt: derefTime(colCreatedAt),
-				UpdatedAt: colUpdatedAt,
-				Tasks:     []models.TaskWithTag{},
-			}
-			columnsMap[*colID] = &col
-			columnOrder = append(columnOrder, *colID)
-		}
-
-		if taskID != nil {
-			task := models.TaskWithTag{
-				ID:          *taskID,
-				Name:        derefStr(taskName),
-				Description: taskDesc,
-				Position:    derefInt(taskPos),
-				ColumnID:    derefUUID(taskColID),
-				TagID:       taskTagID,
-				Status:      taskStatus,
-				CreatedBy:   derefUUID(taskCreatedBy),
-				CreatedAt:   derefTime(taskCreatedAt),
-				UpdatedAt:   taskUpdAt,
-			}
-			if tagID != nil {
-				task.Tag = &models.TagName{ID: *tagID, Name: derefStr(tagName), Color: tagColor}
-			}
-			columnsMap[*colID].Tasks = append(columnsMap[*colID].Tasks, task)
-		}
 	}
-
-	err = rows.Err()
-
-	if err != nil {
+	if err := rows.Err(); err != nil {
 		return models.WorkspaceDetail{}, err
 	}
-
-	if !initialized {
+	if !acc.initialized {
 		return models.WorkspaceDetail{}, pgx.ErrNoRows
 	}
 
-	detail.Columns = make([]models.ColumnWithTasks, 0, len(columnOrder))
-	for _, colID := range columnOrder {
-		detail.Columns = append(detail.Columns, *columnsMap[colID])
-	}
-
+	detail := acc.detail
+	detail.Columns = acc.buildColumnsWithTasks()
 	return detail, nil
 }
 
-func (r *WorkspaceRepository) Update(ctx context.Context, id uuid.UUID, userID uuid.UUID, name *string, description *string) (models.Workspace, error) {
+// workspaceDetailAccumulator collects the denormalized rows of the workspace
+// detail query (workspace x columns x tasks x tags x assignees) into the
+// nested structure expected by models.WorkspaceDetail.
+type workspaceDetailAccumulator struct {
+	detail       models.WorkspaceDetail
+	columnsMap   map[uuid.UUID]*models.ColumnWithTasks
+	columnOrder  []uuid.UUID
+	taskOrder    map[uuid.UUID][]uuid.UUID
+	tasksMap     map[uuid.UUID]*models.TaskWithTag
+	assigneeSeen map[uuid.UUID]map[uuid.UUID]bool
+	initialized  bool
+}
+
+func newWorkspaceDetailAccumulator() *workspaceDetailAccumulator {
+	return &workspaceDetailAccumulator{
+		columnsMap:   make(map[uuid.UUID]*models.ColumnWithTasks),
+		taskOrder:    make(map[uuid.UUID][]uuid.UUID),
+		tasksMap:     make(map[uuid.UUID]*models.TaskWithTag),
+		assigneeSeen: make(map[uuid.UUID]map[uuid.UUID]bool),
+	}
+}
+
+func (a *workspaceDetailAccumulator) scanRow(rows pgx.Rows) error {
+	var (
+		wsID                       uuid.UUID
+		wsName                     string
+		wsDesc                     *string
+		wsCreatedAt                time.Time
+		wsUpdatedAt                *time.Time
+		colID, colWsID             *uuid.UUID
+		colCreatedBy               *uuid.UUID
+		colName                    *string
+		colPos                     *int
+		colCreatedAt, colUpdatedAt *time.Time
+		taskID, taskColID          *uuid.UUID
+		taskName                   *string
+		taskDesc                   *string
+		taskPos                    *int
+		taskTagID, taskCreatedBy   *uuid.UUID
+		taskStatus                 *string
+		taskCreatedAt, taskUpdAt   *time.Time
+		tagID                      *uuid.UUID
+		tagName                    *string
+		tagColor                   *string
+		assigneeID                 *uuid.UUID
+		assigneeEmail              *string
+		assigneeAvatarVersion      *string
+	)
+
+	err := rows.Scan(
+		&wsID, &wsName, &wsDesc, &wsCreatedAt, &wsUpdatedAt,
+		&colID, &colName, &colPos, &colWsID, &colCreatedBy, &colCreatedAt, &colUpdatedAt,
+		&taskID, &taskName, &taskDesc, &taskPos, &taskColID, &taskTagID, &taskStatus, &taskCreatedBy, &taskCreatedAt, &taskUpdAt,
+		&tagID, &tagName, &tagColor,
+		&assigneeID, &assigneeEmail, &assigneeAvatarVersion,
+	)
+	if err != nil {
+		return err
+	}
+
+	if !a.initialized {
+		a.detail.ID = wsID
+		a.detail.Name = wsName
+		a.detail.Description = wsDesc
+		a.detail.CreatedAt = wsCreatedAt
+		a.detail.UpdatedAt = wsUpdatedAt
+		a.initialized = true
+	}
+
+	if colID == nil {
+		return nil
+	}
+
+	if _, exists := a.columnsMap[*colID]; !exists {
+		col := models.ColumnWithTasks{
+			ID:        *colID,
+			Name:      derefStr(colName),
+			Position:  derefInt(colPos),
+			CreatedBy: derefUUID(colCreatedBy),
+			CreatedAt: derefTime(colCreatedAt),
+			UpdatedAt: colUpdatedAt,
+		}
+		a.columnsMap[*colID] = &col
+		a.columnOrder = append(a.columnOrder, *colID)
+	}
+
+	if taskID == nil {
+		return nil
+	}
+
+	task, exists := a.tasksMap[*taskID]
+	if !exists {
+		task = &models.TaskWithTag{
+			ID:            *taskID,
+			Name:          derefStr(taskName),
+			Description:   taskDesc,
+			Position:      derefInt(taskPos),
+			ColumnID:      derefUUID(taskColID),
+			TagID:         taskTagID,
+			Status:        taskStatus,
+			CreatedBy:     derefUUID(taskCreatedBy),
+			CreatedAt:     derefTime(taskCreatedAt),
+			UpdatedAt:     taskUpdAt,
+			AssignedUsers: []models.TaskAssignedUser{},
+		}
+		if tagID != nil {
+			task.Tag = &models.TagName{ID: *tagID, Name: derefStr(tagName), Color: tagColor}
+		}
+		a.tasksMap[*taskID] = task
+		a.taskOrder[*colID] = append(a.taskOrder[*colID], *taskID)
+		a.assigneeSeen[*taskID] = make(map[uuid.UUID]bool)
+	}
+
+	if assigneeID != nil && !a.assigneeSeen[*taskID][*assigneeID] {
+		a.assigneeSeen[*taskID][*assigneeID] = true
+		task.AssignedUsers = append(task.AssignedUsers, models.TaskAssignedUser{
+			ID:            *assigneeID,
+			Email:         derefStr(assigneeEmail),
+			AvatarVersion: assigneeAvatarVersion,
+		})
+	}
+
+	return nil
+}
+
+func (a *workspaceDetailAccumulator) buildColumnsWithTasks() []models.ColumnWithTasks {
+	columns := make([]models.ColumnWithTasks, 0, len(a.columnOrder))
+	for _, colID := range a.columnOrder {
+		col := a.columnsMap[colID]
+		col.Tasks = make([]models.TaskWithTag, 0, len(a.taskOrder[colID]))
+		for _, tID := range a.taskOrder[colID] {
+			col.Tasks = append(col.Tasks, *a.tasksMap[tID])
+		}
+		columns = append(columns, *col)
+	}
+	return columns
+}
+
+func (r *WorkspaceRepository) Update(ctx context.Context, id, userID uuid.UUID, name, description *string) (models.Workspace, error) {
 	return queryStruct[models.Workspace](ctx, r.db, `
 		UPDATE workspaces
 		SET name        = COALESCE($1, name),
@@ -310,15 +398,24 @@ func (r *WorkspaceRepository) Update(ctx context.Context, id uuid.UUID, userID u
 		userID)
 }
 
-func (r *WorkspaceRepository) Exists(ctx context.Context, id uuid.UUID, userID uuid.UUID) (bool, error) {
+func (r *WorkspaceRepository) Exists(ctx context.Context, id, userID uuid.UUID) (bool, error) {
 	var exists bool
 	row := r.db.QueryRow(ctx, `
+		WITH accessible_workspaces AS (
+			SELECT id FROM workspaces WHERE created_by = $2
+			UNION
+			SELECT workspace_id FROM access_grants WHERE member_id = $2
+			UNION
+			SELECT w.id FROM workspaces w
+			JOIN organisation_members om ON om.organisation_id = w.organisation_id
+			WHERE om.member_id = $2
+		)
 		SELECT EXISTS(
 			SELECT 1
-			FROM workspaces
-			WHERE id = $1 
-			  AND created_by = $2 
-			  AND deleted_at IS NULL
+			FROM workspaces w
+			JOIN accessible_workspaces aw ON aw.id = w.id
+			WHERE w.id = $1
+			  AND w.deleted_at IS NULL
 		)
 		`,
 		id,
@@ -327,12 +424,12 @@ func (r *WorkspaceRepository) Exists(ctx context.Context, id uuid.UUID, userID u
 	return exists, err
 }
 
-func (r *WorkspaceRepository) SoftDelete(ctx context.Context, id uuid.UUID, userID uuid.UUID) (models.Workspace, error) {
+func (r *WorkspaceRepository) SoftDelete(ctx context.Context, id, userID uuid.UUID) (models.Workspace, error) {
 	tx, err := r.db.Begin(ctx)
 	if err != nil {
 		return models.Workspace{}, err
 	}
-	defer tx.Rollback(ctx)
+	defer func() { _ = tx.Rollback(ctx) }()
 
 	workspace, err := queryStruct[models.Workspace](ctx, tx, `
 		UPDATE workspaces
@@ -358,7 +455,6 @@ func (r *WorkspaceRepository) SoftDelete(ctx context.Context, id uuid.UUID, user
 		`,
 		id,
 		userID)
-
 	if err != nil {
 		return models.Workspace{}, err
 	}
@@ -373,13 +469,11 @@ func (r *WorkspaceRepository) SoftDelete(ctx context.Context, id uuid.UUID, user
 		`,
 		id,
 		userID)
-
 	if err != nil {
 		return models.Workspace{}, err
 	}
 
 	err = tx.Commit(ctx)
-
 	if err != nil {
 		return models.Workspace{}, err
 	}

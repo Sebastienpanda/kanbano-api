@@ -50,15 +50,16 @@ type ColumnWithTasks struct {
 }
 
 type TaskWithTag struct {
-	ID          uuid.UUID  `json:"id"`
-	Name        string     `json:"name"`
-	Description *string    `json:"description"`
-	Position    int        `json:"position"`
-	ColumnID    uuid.UUID  `json:"column_id"`
-	TagID       *uuid.UUID `json:"tag_id"`
-	Status      *string    `json:"status"`
-	CreatedBy   uuid.UUID  `json:"created_by"`
-	CreatedAt   time.Time  `json:"created_at"`
-	UpdatedAt   *time.Time `json:"updated_at"`
-	Tag         *TagName   `json:"tag"`
+	ID            uuid.UUID          `json:"id"`
+	Name          string             `json:"name"`
+	Description   *string            `json:"description"`
+	Position      int                `json:"position"`
+	ColumnID      uuid.UUID          `json:"column_id"`
+	TagID         *uuid.UUID         `json:"tag_id"`
+	Status        *string            `json:"status"`
+	CreatedBy     uuid.UUID          `json:"created_by"`
+	CreatedAt     time.Time          `json:"created_at"`
+	UpdatedAt     *time.Time         `json:"updated_at"`
+	Tag           *TagName           `json:"tag"`
+	AssignedUsers []TaskAssignedUser `json:"assigned_users"`
 }

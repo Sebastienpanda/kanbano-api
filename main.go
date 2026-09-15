@@ -9,11 +9,21 @@ import (
 	"os"
 	"strconv"
 
+	_ "image/jpeg" // register JPEG decoder used by internal/media for avatar processing
+
 	"github.com/joho/godotenv"
 )
 
+// @title Kanbano API
+// @version 1.0
+// @description REST API for the Kanbano kanban application (workspaces, columns, tasks, tags, organisations, users).
+// @host localhost:8080
+// @BasePath /api/v1
+// @securityDefinitions.apikey BearerAuth
+// @in header
+// @name Authorization
+// @description Neon Auth JWT (EdDSA), sent as "Bearer <token>".
 func main() {
-
 	_ = godotenv.Load()
 
 	pool := db.MustConnectDB()

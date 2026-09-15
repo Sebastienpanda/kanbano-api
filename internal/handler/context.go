@@ -10,6 +10,9 @@ import (
 )
 
 func userIDFromContext(r *http.Request) uuid.UUID {
+	// middleware.AuthRequired always sets UserIDKey to a valid UUID string
+	// before a handler runs; a panic here signals a middleware wiring bug.
+	//nolint:forcetypeassert,errcheck // invariant guaranteed by AuthRequired
 	return uuid.MustParse(r.Context().Value(middleware.UserIDKey).(string))
 }
 
@@ -27,7 +30,7 @@ func requireWorkspace(w http.ResponseWriter, r *http.Request, workspaceRepo *rep
 
 	workspaceID, ok = parseUUIDParam(w, r, "id")
 	if !ok {
-		return
+		return userID, workspaceID, ok
 	}
 
 	exists, err := workspaceRepo.Exists(r.Context(), workspaceID, userID)

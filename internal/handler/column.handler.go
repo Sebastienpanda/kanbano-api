@@ -1,7 +1,6 @@
 package handler
 
 import (
-	"errors"
 	"kanbano-api/internal/models"
 	"kanbano-api/internal/repository"
 	"kanbano-api/internal/utils"
@@ -9,7 +8,6 @@ import (
 	"net/http"
 
 	"github.com/google/uuid"
-	"github.com/jackc/pgx/v5"
 )
 
 type ColumnHandler struct {
@@ -23,33 +21,29 @@ type createColumnBody struct {
 }
 
 type updateColumnBody struct {
-	Name *string `json:"name" validate:"omitempty,min=1,max=100"`
-}
-
-type reorderColumnBody struct {
-	Position int `json:"position" validate:"min=0"`
+	Name     *string `json:"name,omitempty" validate:"omitempty,min=1,max=100"`
+	Position *int    `json:"position,omitempty" validate:"omitempty,min=0"`
 }
 
 func NewColumnHandler(repo *repository.ColumnRepository, workspaceRepo *repository.WorkspaceRepository, hub *ws.Hub) *ColumnHandler {
 	return &ColumnHandler{repo: repo, workspaceRepo: workspaceRepo, hub: hub}
 }
 
-func (h *ColumnHandler) NamesByWorkspaceName(w http.ResponseWriter, r *http.Request) {
-	userID := userIDFromContext(r)
-
-	name := r.URL.Query().Get("name")
-	if name == "" {
-		badRequest(w, "missing name parameter")
-		return
-	}
-
-	workspaceID, err := h.workspaceRepo.GetIDByName(r.Context(), name, userID)
-	if err != nil {
-		if errors.Is(err, pgx.ErrNoRows) {
-			notFound(w, "workspace not found")
-			return
-		}
-		serverError(w, r, err)
+// Names godoc
+// @Summary List column names
+// @Tags column
+// @Produce json
+// @Param id path string true "Workspace ID"
+// @Success 200 {array} models.ColumnName
+// @Failure 400 {object} utils.ErrorResponse
+// @Failure 401 {object} utils.ErrorResponse
+// @Failure 404 {object} utils.ErrorResponse
+// @Failure 500 {object} utils.ErrorResponse
+// @Security BearerAuth
+// @Router /workspaces/{id}/columns/names [get]
+func (h *ColumnHandler) Names(w http.ResponseWriter, r *http.Request) {
+	_, workspaceID, ok := h.parseWorkspaceContext(w, r)
+	if !ok {
 		return
 	}
 
@@ -69,20 +63,17 @@ func (h *ColumnHandler) parseWorkspaceContext(w http.ResponseWriter, r *http.Req
 func (h *ColumnHandler) parseColumnContext(w http.ResponseWriter, r *http.Request) (userID, workspaceID, columnID uuid.UUID, ok bool) {
 	userID, workspaceID, ok = h.parseWorkspaceContext(w, r)
 	if !ok {
-		return
+		return userID, workspaceID, columnID, ok
 	}
 
 	columnID, ok = parseUUIDParam(w, r, "columnId")
-	return
+	return userID, workspaceID, columnID, ok
 }
 
 func (h *ColumnHandler) broadcastColumn(userID, workspaceID uuid.UUID, eventType ws.EventType, column models.Column) {
 	h.hub.Broadcast(userID, ws.Event{Type: eventType, WorkspaceID: &workspaceID, Data: column})
 }
 
-// applyColumnChange handles the common tail of Update/Reorder/Delete: turn a repo
-// error into a 404/500, otherwise broadcast the change (WS carries the payload).
-// Returns true when the change succeeded and the caller should send its ack.
 func (h *ColumnHandler) applyColumnChange(w http.ResponseWriter, r *http.Request, userID, workspaceID uuid.UUID, eventType ws.EventType, column models.Column, err error) bool {
 	if handleRepoError(w, r, err, "column not found") {
 		return false
@@ -92,6 +83,21 @@ func (h *ColumnHandler) applyColumnChange(w http.ResponseWriter, r *http.Request
 	return true
 }
 
+// Create godoc
+// @Summary Create a column
+// @Tags column
+// @Accept json
+// @Produce json
+// @Param id path string true "Workspace ID"
+// @Param body body createColumnBody true "Column to create"
+// @Success 201 {object} utils.CreateResponse
+// @Failure 400 {object} utils.ErrorResponse
+// @Failure 401 {object} utils.ErrorResponse
+// @Failure 404 {object} utils.ErrorResponse
+// @Failure 422 {object} map[string]any
+// @Failure 500 {object} utils.ErrorResponse
+// @Security BearerAuth
+// @Router /workspaces/{id}/columns [post]
 func (h *ColumnHandler) Create(w http.ResponseWriter, r *http.Request) {
 	userID, workspaceID, ok := h.parseWorkspaceContext(w, r)
 	if !ok {
@@ -112,6 +118,22 @@ func (h *ColumnHandler) Create(w http.ResponseWriter, r *http.Request) {
 	utils.RespondCreated(w, &column.ID)
 }
 
+// Update godoc
+// @Summary Update or reorder a column
+// @Tags column
+// @Accept json
+// @Produce json
+// @Param id path string true "Workspace ID"
+// @Param columnId path string true "Column ID"
+// @Param body body updateColumnBody true "Fields to update"
+// @Success 200 {object} utils.UpdateResponse
+// @Failure 400 {object} utils.ErrorResponse
+// @Failure 401 {object} utils.ErrorResponse
+// @Failure 404 {object} utils.ErrorResponse
+// @Failure 422 {object} map[string]any
+// @Failure 500 {object} utils.ErrorResponse
+// @Security BearerAuth
+// @Router /workspaces/{id}/columns/{columnId} [patch]
 func (h *ColumnHandler) Update(w http.ResponseWriter, r *http.Request) {
 	userID, workspaceID, columnID, ok := h.parseColumnContext(w, r)
 	if !ok {
@@ -124,28 +146,34 @@ func (h *ColumnHandler) Update(w http.ResponseWriter, r *http.Request) {
 	}
 
 	column, err := h.repo.Update(r.Context(), columnID, workspaceID, body.Name, userID)
-	if h.applyColumnChange(w, r, userID, workspaceID, ws.ColumnUpdated, column, err) {
-		utils.RespondUpdated(w)
-	}
-}
-
-func (h *ColumnHandler) Reorder(w http.ResponseWriter, r *http.Request) {
-	userID, workspaceID, columnID, ok := h.parseColumnContext(w, r)
-	if !ok {
+	if handleRepoError(w, r, err, "column not found") {
 		return
 	}
 
-	body, ok := utils.DecodeAndValidate[reorderColumnBody]("ColumnHandler.Reorder", w, r)
-	if !ok {
-		return
+	if body.Position != nil {
+		column, err = h.repo.Reorder(r.Context(), columnID, workspaceID, *body.Position, userID)
+		if handleRepoError(w, r, err, "column not found") {
+			return
+		}
 	}
 
-	column, err := h.repo.Reorder(r.Context(), columnID, workspaceID, body.Position, userID)
-	if h.applyColumnChange(w, r, userID, workspaceID, ws.ColumnUpdated, column, err) {
-		utils.RespondUpdated(w)
-	}
+	h.broadcastColumn(userID, workspaceID, ws.ColumnUpdated, column)
+	utils.RespondUpdated(w)
 }
 
+// Delete godoc
+// @Summary Delete a column
+// @Description Soft-deletes a column.
+// @Tags column
+// @Param id path string true "Workspace ID"
+// @Param columnId path string true "Column ID"
+// @Success 204 "No Content"
+// @Failure 400 {object} utils.ErrorResponse
+// @Failure 401 {object} utils.ErrorResponse
+// @Failure 404 {object} utils.ErrorResponse
+// @Failure 500 {object} utils.ErrorResponse
+// @Security BearerAuth
+// @Router /workspaces/{id}/columns/{columnId} [delete]
 func (h *ColumnHandler) Delete(w http.ResponseWriter, r *http.Request) {
 	userID, workspaceID, columnID, ok := h.parseColumnContext(w, r)
 	if !ok {

@@ -5,6 +5,7 @@ import (
 	"kanbano-api/internal/models"
 
 	"github.com/google/uuid"
+	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgxpool"
 )
 
@@ -16,10 +17,24 @@ func NewTaskRepository(db *pgxpool.Pool) *TaskRepository {
 	return &TaskRepository{db: db}
 }
 
+func (r *TaskRepository) Exists(ctx context.Context, taskID, columnID uuid.UUID) (bool, error) {
+	var exists bool
+	row := r.db.QueryRow(ctx, `
+		SELECT EXISTS(
+			SELECT 1 FROM tasks
+			WHERE id = $1 AND column_id = $2 AND deleted_at IS NULL
+		)
+		`,
+		taskID,
+		columnID)
+	err := row.Scan(&exists)
+	return exists, err
+}
+
 func (r *TaskRepository) Create(ctx context.Context, name string, description *string, columnID uuid.UUID, tagID *uuid.UUID, status *string, createdBy uuid.UUID) (models.Task, error) {
 	return queryStruct[models.Task](ctx, r.db, `
 		INSERT INTO tasks (name, description, column_id, tag_id, status, position, created_by)
-		VALUES ($1, $2, $3, $4, $5, (SELECT COALESCE(MAX(position) + 1, 0) FROM tasks WHERE column_id = $3), $6)
+		VALUES ($1, $2, $3, $4, COALESCE($5, 'À faire'), (SELECT COALESCE(MAX(position) + 1, 0) FROM tasks WHERE column_id = $3), $6)
 		RETURNING id, name, description, position, column_id, tag_id, status, created_by, updated_by, deleted_by, created_at, updated_at, deleted_at
 		`,
 		name,
@@ -30,7 +45,17 @@ func (r *TaskRepository) Create(ctx context.Context, name string, description *s
 		createdBy)
 }
 
-func (r *TaskRepository) Update(ctx context.Context, id uuid.UUID, columnID uuid.UUID, name *string, description *string, tagID *uuid.UUID, status *string, actorID uuid.UUID) (models.Task, error) {
+type TaskUpdate struct {
+	ID          uuid.UUID
+	ColumnID    uuid.UUID
+	Name        *string
+	Description *string
+	TagID       *uuid.UUID
+	Status      *string
+	ActorID     uuid.UUID
+}
+
+func (r *TaskRepository) Update(ctx context.Context, update TaskUpdate) (models.Task, error) {
 	return queryStruct[models.Task](ctx, r.db, `
 		UPDATE tasks
 		SET name        = COALESCE($1, name),
@@ -42,21 +67,71 @@ func (r *TaskRepository) Update(ctx context.Context, id uuid.UUID, columnID uuid
 		WHERE id = $5 AND column_id = $6 AND deleted_at IS NULL
 		RETURNING id, name, description, position, column_id, tag_id, status, created_by, updated_by, deleted_by, created_at, updated_at, deleted_at
 		`,
-		name,
-		description,
-		tagID,
-		status,
-		id,
-		columnID,
-		actorID)
+		update.Name,
+		update.Description,
+		update.TagID,
+		update.Status,
+		update.ID,
+		update.ColumnID,
+		update.ActorID)
 }
 
-func (r *TaskRepository) Reorder(ctx context.Context, id uuid.UUID, columnID uuid.UUID, position *int, newColumnID *uuid.UUID, actorID uuid.UUID) (models.Task, error) {
+func shiftPositions(ctx context.Context, tx pgx.Tx, columnID uuid.UUID, delta int, where string, args []any, actorID uuid.UUID) error {
+	query := `
+		UPDATE tasks
+		SET position = position + $1, updated_by = $2, updated_at = NOW()
+		WHERE column_id = $3
+		  AND deleted_at IS NULL
+		  AND ` + where
+	fullArgs := append([]any{delta, actorID, columnID}, args...)
+	_, err := tx.Exec(ctx, query, fullArgs...)
+	return err
+}
+
+func reorderAcrossColumns(ctx context.Context, tx pgx.Tx, oldColumnID, targetColumnID uuid.UUID, oldPosition int, position *int, actorID uuid.UUID) (int, error) {
+	if err := shiftPositions(ctx, tx, oldColumnID, -1, "position > $4", []any{oldPosition}, actorID); err != nil {
+		return 0, err
+	}
+
+	newPosition := 0
+	if position != nil {
+		newPosition = *position
+	} else {
+		row := tx.QueryRow(ctx, `
+			SELECT COALESCE(MAX(position) + 1, 0)
+			FROM tasks
+			WHERE column_id = $1 AND deleted_at IS NULL
+			`,
+			targetColumnID)
+		if err := row.Scan(&newPosition); err != nil {
+			return 0, err
+		}
+	}
+
+	if err := shiftPositions(ctx, tx, targetColumnID, 1, "position >= $4", []any{newPosition}, actorID); err != nil {
+		return 0, err
+	}
+
+	return newPosition, nil
+}
+
+func reorderWithinColumn(ctx context.Context, tx pgx.Tx, id, columnID uuid.UUID, oldPosition, newPosition int, actorID uuid.UUID) error {
+	if newPosition == oldPosition {
+		return nil
+	}
+
+	if newPosition < oldPosition {
+		return shiftPositions(ctx, tx, columnID, 1, "id != $4 AND position >= $5 AND position < $6", []any{id, newPosition, oldPosition}, actorID)
+	}
+	return shiftPositions(ctx, tx, columnID, -1, "id != $4 AND position > $5 AND position <= $6", []any{id, oldPosition, newPosition}, actorID)
+}
+
+func (r *TaskRepository) Reorder(ctx context.Context, id, columnID uuid.UUID, position *int, newColumnID *uuid.UUID, actorID uuid.UUID) (models.Task, error) {
 	tx, err := r.db.Begin(ctx)
 	if err != nil {
 		return models.Task{}, err
 	}
-	defer tx.Rollback(ctx)
+	defer func() { _ = tx.Rollback(ctx) }()
 
 	var oldPosition int
 	row := tx.QueryRow(ctx, `
@@ -67,8 +142,7 @@ func (r *TaskRepository) Reorder(ctx context.Context, id uuid.UUID, columnID uui
 		`,
 		id,
 		columnID)
-	err = row.Scan(&oldPosition)
-	if err != nil {
+	if err := row.Scan(&oldPosition); err != nil {
 		return models.Task{}, err
 	}
 
@@ -79,45 +153,7 @@ func (r *TaskRepository) Reorder(ctx context.Context, id uuid.UUID, columnID uui
 
 	var newPosition int
 	if targetColumnID != columnID {
-		_, err = tx.Exec(ctx, `
-			UPDATE tasks
-			SET position = position - 1, updated_by = $3, updated_at = NOW()
-			WHERE column_id = $1
-			  AND position > $2
-			  AND deleted_at IS NULL
-			`,
-			columnID,
-			oldPosition,
-			actorID)
-		if err != nil {
-			return models.Task{}, err
-		}
-
-		if position != nil {
-			newPosition = *position
-		} else {
-			row := tx.QueryRow(ctx, `
-				SELECT COALESCE(MAX(position) + 1, 0)
-				FROM tasks
-				WHERE column_id = $1 AND deleted_at IS NULL
-				`,
-				targetColumnID)
-			err = row.Scan(&newPosition)
-			if err != nil {
-				return models.Task{}, err
-			}
-		}
-
-		_, err = tx.Exec(ctx, `
-			UPDATE tasks
-			SET position = position + 1, updated_by = $3, updated_at = NOW()
-			WHERE column_id = $1
-			  AND position >= $2
-			  AND deleted_at IS NULL
-			`,
-			targetColumnID,
-			newPosition,
-			actorID)
+		newPosition, err = reorderAcrossColumns(ctx, tx, columnID, targetColumnID, oldPosition, position, actorID)
 		if err != nil {
 			return models.Task{}, err
 		}
@@ -126,44 +162,8 @@ func (r *TaskRepository) Reorder(ctx context.Context, id uuid.UUID, columnID uui
 		if position != nil {
 			newPosition = *position
 		}
-		if newPosition != oldPosition {
-			if newPosition < oldPosition {
-				_, err = tx.Exec(ctx, `
-					UPDATE tasks
-					SET position = position + 1, updated_by = $5, updated_at = NOW()
-					WHERE column_id = $1
-					  AND id != $2
-					  AND position >= $3
-					  AND position < $4
-					  AND deleted_at IS NULL
-					`,
-					columnID,
-					id,
-					newPosition,
-					oldPosition,
-					actorID)
-				if err != nil {
-					return models.Task{}, err
-				}
-			} else {
-				_, err = tx.Exec(ctx, `
-					UPDATE tasks
-					SET position = position - 1, updated_by = $5, updated_at = NOW()
-					WHERE column_id = $1
-					  AND id != $2
-					  AND position > $3
-					  AND position <= $4
-					  AND deleted_at IS NULL
-					`,
-					columnID,
-					id,
-					oldPosition,
-					newPosition,
-					actorID)
-				if err != nil {
-					return models.Task{}, err
-				}
-			}
+		if err := reorderWithinColumn(ctx, tx, id, columnID, oldPosition, newPosition, actorID); err != nil {
+			return models.Task{}, err
 		}
 	}
 
@@ -185,15 +185,14 @@ func (r *TaskRepository) Reorder(ctx context.Context, id uuid.UUID, columnID uui
 		return models.Task{}, err
 	}
 
-	err = tx.Commit(ctx)
-	if err != nil {
+	if err := tx.Commit(ctx); err != nil {
 		return models.Task{}, err
 	}
 
 	return task, nil
 }
 
-func (r *TaskRepository) SoftDelete(ctx context.Context, id uuid.UUID, columnID uuid.UUID, actorID uuid.UUID) (models.Task, error) {
+func (r *TaskRepository) SoftDelete(ctx context.Context, id, columnID, actorID uuid.UUID) (models.Task, error) {
 	return queryStruct[models.Task](ctx, r.db, `
 		UPDATE tasks
 		SET deleted_at = NOW(),

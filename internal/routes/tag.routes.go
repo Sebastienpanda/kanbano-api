@@ -7,9 +7,7 @@ import (
 )
 
 func TagsRoutes(r chi.Router, wh *handler.TagHandler) {
-
 	r.Route("/tags", func(r chi.Router) {
-
 		r.Get("/", wh.List)
 		r.Post("/", wh.Create)
 		r.Patch("/{id}", wh.Update)

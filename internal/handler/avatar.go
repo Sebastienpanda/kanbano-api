@@ -8,8 +8,6 @@ import (
 	"github.com/google/uuid"
 )
 
-// avatarSet builds the public avatar URLs for a user's version, or nil when
-// storage is unavailable or no avatar is set.
 func avatarSet(store *storage.Client, userID uuid.UUID, version *string) *models.AvatarSet {
 	if store == nil || version == nil || *version == "" {
 		return nil

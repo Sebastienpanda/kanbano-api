@@ -8,7 +8,6 @@ import (
 )
 
 func LogRoutes(r chi.Router, lh *handler.LogHandler) {
-
 	r.Route("/admin/logs", func(r chi.Router) {
 		r.Use(middleware.AdminRequired)
 

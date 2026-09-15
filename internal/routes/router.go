@@ -12,6 +12,7 @@ import (
 	"github.com/go-chi/chi/v5/middleware"
 	"github.com/go-chi/cors"
 	"github.com/jackc/pgx/v5/pgxpool"
+	"golang.org/x/time/rate"
 )
 
 func SetupRouter(pool *pgxpool.Pool, store *storage.Client) *chi.Mux {
@@ -29,6 +30,9 @@ func SetupRouter(pool *pgxpool.Pool, store *storage.Client) *chi.Mux {
 		AllowedMethods: []string{"GET", "POST", "PATCH", "PUT", "DELETE"},
 		AllowedHeaders: []string{"Accept", "Authorization", "Content-Type"},
 	}))
+	appmiddleware.SetTrustedProxies(getTrustedProxies())
+	r.Use(appmiddleware.NoStore)
+	r.Use(appmiddleware.RateLimit(rate.Limit(10), 30))
 
 	RegisterRoutes(r, pool, store)
 	return r
@@ -40,4 +44,12 @@ func getAllowedOrigins() []string {
 		return []string{"http://localhost:4200"}
 	}
 	return strings.Split(origins, ",")
+}
+
+func getTrustedProxies() []string {
+	raw := os.Getenv("TRUSTED_PROXY_CIDRS")
+	if raw == "" {
+		return nil
+	}
+	return strings.Split(raw, ",")
 }

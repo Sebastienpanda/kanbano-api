@@ -9,8 +9,6 @@ import (
 	"image/png"
 	"io"
 
-	_ "image/jpeg" // register JPEG decoder for image.Decode
-
 	"github.com/gen2brain/avif"
 	"github.com/gen2brain/webp"
 	"github.com/google/uuid"
