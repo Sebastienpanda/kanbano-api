@@ -1,2 +1,2 @@
-// Package storage encapsule le client de stockage objet utilisé pour les avatars.
+// Package storage wraps the object storage client used for avatars.
 package storage

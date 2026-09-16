@@ -19,6 +19,9 @@ install-hooks:
 routes:
 	@go run ./cmd/routes
 
+swag:
+	swag init --requiredByDefault
+
 # Scaffold de fichiers avec le bon package.
 #   make scaffold name=toto
 #     -> internal/handler/toto.handler.go       (package handler)
@@ -32,4 +35,4 @@ BASH ?= C:/Program Files/Git/bin/bash.exe
 scaffold:
 	@"$(BASH)" scripts/scaffold.sh "$(name)" "$(layers)"
 
-.PHONY: migrate-up migrate-down migrate-status migrate-create install-hooks scaffold routes
+.PHONY: migrate-up migrate-down migrate-status migrate-create install-hooks scaffold routes swag

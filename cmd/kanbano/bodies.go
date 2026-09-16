@@ -1,17 +1,17 @@
 package main
 
-// bodyField décrit un champ attendu dans le body JSON d'une requête.
+// bodyField describes an expected field in a request's JSON body.
 type bodyField struct {
 	name     string
 	typ      string
 	required bool
 }
 
-// requestBodies associe méthode+chemin (tels que renvoyés par chi.Walk) à la
-// liste des champs de son body JSON. À tenir à jour si les *Body des
-// handlers changent (voir internal/handler/*.handler.go).
+// requestBodies maps method+path (as returned by chi.Walk) to the list of
+// fields in its JSON body. Keep in sync if the handlers' *Body types change
+// (see internal/handler/*.handler.go).
 //
-//nolint:goconst // table déclarative : les noms de champs JSON se répètent légitimement d'une route à l'autre, les remplacer par des constantes nuirait à la lisibilité
+//nolint:goconst // declarative table: JSON field names legitimately repeat across routes, replacing them with constants would hurt readability
 var requestBodies = map[string][]bodyField{
 	"PATCH /api/v1/me/": {
 		{"name", "string", true},

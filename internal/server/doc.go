@@ -1,2 +1,2 @@
-// Package server démarre et arrête le serveur HTTP, avec gestion de l'arrêt gracieux.
+// Package server starts and stops the HTTP server, with graceful shutdown handling.
 package server

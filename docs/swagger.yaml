@@ -1,0 +1,1852 @@
+basePath: /api/v1
+definitions:
+  handler.assignTaskBody:
+    properties:
+      member_id:
+        type: string
+      role:
+        enum:
+        - view
+        - edit
+        type: string
+    required:
+    - member_id
+    - role
+    type: object
+  handler.brevoEvent:
+    properties:
+      date:
+        type: string
+      email:
+        type: string
+      event:
+        type: string
+      reason:
+        type: string
+      subject:
+        type: string
+    required:
+    - date
+    - email
+    - event
+    - reason
+    - subject
+    type: object
+  handler.createColumnBody:
+    properties:
+      name:
+        maxLength: 100
+        minLength: 1
+        type: string
+    required:
+    - name
+    type: object
+  handler.createTagBody:
+    properties:
+      color:
+        maxLength: 50
+        type: string
+      name:
+        maxLength: 50
+        minLength: 1
+        type: string
+    required:
+    - name
+    type: object
+  handler.createTaskBody:
+    properties:
+      description:
+        maxLength: 5000
+        type: string
+      name:
+        maxLength: 200
+        minLength: 1
+        type: string
+      status:
+        type: string
+      tag_id:
+        type: string
+      tag_name:
+        maxLength: 50
+        type: string
+    required:
+    - name
+    type: object
+  handler.createWorkspaceBody:
+    properties:
+      description:
+        maxLength: 2000
+        type: string
+      name:
+        maxLength: 100
+        minLength: 1
+        type: string
+    required:
+    - name
+    type: object
+  handler.inviteBody:
+    properties:
+      column_id:
+        type: string
+      email:
+        type: string
+      role:
+        enum:
+        - view
+        - edit
+        type: string
+      task_id:
+        type: string
+      workspace_id:
+        type: string
+    required:
+    - email
+    type: object
+  handler.meResponse:
+    properties:
+      avatar:
+        $ref: '#/definitions/models.AvatarSet'
+      avatar_updated_at:
+        type: string
+      created_at:
+        type: string
+      email:
+        type: string
+      id:
+        type: string
+      name:
+        type: string
+    required:
+    - avatar
+    - created_at
+    - email
+    - id
+    - name
+    type: object
+  handler.memberResponse:
+    properties:
+      avatar:
+        $ref: '#/definitions/models.AvatarSet'
+      id:
+        type: string
+      joined_at:
+        type: string
+      name:
+        type: string
+      role:
+        type: string
+    required:
+    - avatar
+    - id
+    - joined_at
+    - name
+    - role
+    type: object
+  handler.organisationResponse:
+    properties:
+      id:
+        type: string
+      members:
+        items:
+          $ref: '#/definitions/handler.memberResponse'
+        type: array
+      user_id:
+        type: string
+    required:
+    - id
+    - members
+    - user_id
+    type: object
+  handler.updateColumnBody:
+    properties:
+      name:
+        maxLength: 100
+        minLength: 1
+        type: string
+      position:
+        minimum: 0
+        type: integer
+    type: object
+  handler.updateInvitationBody:
+    properties:
+      status:
+        enum:
+        - accepted
+        - declined
+        type: string
+    required:
+    - status
+    type: object
+  handler.updateMeBody:
+    properties:
+      name:
+        maxLength: 100
+        minLength: 1
+        type: string
+    required:
+    - name
+    type: object
+  handler.updateTagBody:
+    properties:
+      color:
+        maxLength: 50
+        type: string
+      name:
+        maxLength: 50
+        minLength: 1
+        type: string
+    type: object
+  handler.updateTaskBody:
+    properties:
+      description:
+        maxLength: 5000
+        type: string
+      name:
+        maxLength: 200
+        minLength: 1
+        type: string
+      position:
+        minimum: 0
+        type: integer
+      status:
+        type: string
+      tag_id:
+        type: string
+      tag_name:
+        maxLength: 50
+        type: string
+      targetColumnId:
+        type: string
+    type: object
+  handler.updateWorkspaceBody:
+    properties:
+      description:
+        maxLength: 2000
+        type: string
+      name:
+        maxLength: 100
+        minLength: 1
+        type: string
+    type: object
+  models.AvatarFormats:
+    properties:
+      avif:
+        type: string
+      png:
+        type: string
+      webp:
+        type: string
+    required:
+    - avif
+    - png
+    - webp
+    type: object
+  models.AvatarSet:
+    properties:
+      "45":
+        $ref: '#/definitions/models.AvatarFormats'
+      "100":
+        $ref: '#/definitions/models.AvatarFormats'
+    required:
+    - "100"
+    - "45"
+    type: object
+  models.ColumnName:
+    properties:
+      id:
+        type: string
+      name:
+        type: string
+      workspace_id:
+        type: string
+    required:
+    - id
+    - name
+    - workspace_id
+    type: object
+  models.ColumnWithTasks:
+    properties:
+      created_at:
+        type: string
+      created_by:
+        type: string
+      id:
+        type: string
+      name:
+        type: string
+      position:
+        type: integer
+      role:
+        description: |-
+          Role is the current user's effective role on this column ('edit' or
+          'view'), i.e. whether they can create/edit/move tasks in it.
+        type: string
+      tasks:
+        items:
+          $ref: '#/definitions/models.TaskWithTag'
+        type: array
+      updated_at:
+        type: string
+    required:
+    - created_at
+    - created_by
+    - id
+    - name
+    - position
+    - role
+    - tasks
+    - updated_at
+    type: object
+  models.Log:
+    properties:
+      createdAt:
+        type: string
+      id:
+        type: string
+      level:
+        type: string
+      message:
+        type: string
+      metadata:
+        type: object
+      requestId:
+        type: string
+      source:
+        type: string
+      userId:
+        type: string
+    required:
+    - createdAt
+    - id
+    - level
+    - message
+    - metadata
+    - requestId
+    - source
+    - userId
+    type: object
+  models.OrganisationInvitation:
+    properties:
+      column_id:
+        type: string
+      created_at:
+        type: string
+      email:
+        type: string
+      id:
+        type: string
+      invited_by:
+        type: string
+      organisation_id:
+        type: string
+      responded_at:
+        type: string
+      role:
+        type: string
+      status:
+        type: string
+      task_id:
+        type: string
+      workspace_id:
+        type: string
+    required:
+    - column_id
+    - created_at
+    - email
+    - id
+    - invited_by
+    - organisation_id
+    - responded_at
+    - role
+    - status
+    - task_id
+    - workspace_id
+    type: object
+  models.Tag:
+    properties:
+      color:
+        type: string
+      created_at:
+        type: string
+      created_by:
+        type: string
+      deleted_by:
+        type: string
+      id:
+        type: string
+      name:
+        type: string
+      updated_at:
+        type: string
+      updated_by:
+        type: string
+    required:
+    - color
+    - created_at
+    - created_by
+    - deleted_by
+    - id
+    - name
+    - updated_at
+    - updated_by
+    type: object
+  models.TagName:
+    properties:
+      color:
+        type: string
+      id:
+        type: string
+      name:
+        type: string
+    required:
+    - color
+    - id
+    - name
+    type: object
+  models.TaskAssignedUser:
+    properties:
+      avatar:
+        $ref: '#/definitions/models.AvatarSet'
+      email:
+        type: string
+      id:
+        type: string
+    required:
+    - avatar
+    - email
+    - id
+    type: object
+  models.TaskAssignee:
+    properties:
+      email:
+        type: string
+      id:
+        type: string
+      name:
+        type: string
+      role:
+        type: string
+    required:
+    - email
+    - id
+    - name
+    - role
+    type: object
+  models.TaskWithTag:
+    properties:
+      assigned_users:
+        items:
+          $ref: '#/definitions/models.TaskAssignedUser'
+        type: array
+      column_id:
+        type: string
+      created_at:
+        type: string
+      created_by:
+        type: string
+      description:
+        type: string
+      id:
+        type: string
+      name:
+        type: string
+      position:
+        type: integer
+      status:
+        type: string
+      tag:
+        $ref: '#/definitions/models.TagName'
+      tag_id:
+        type: string
+      updated_at:
+        type: string
+    required:
+    - assigned_users
+    - column_id
+    - created_at
+    - created_by
+    - description
+    - id
+    - name
+    - position
+    - status
+    - tag
+    - tag_id
+    - updated_at
+    type: object
+  models.Workspace:
+    properties:
+      created_at:
+        type: string
+      created_by:
+        type: string
+      deleted_at:
+        type: string
+      deleted_by:
+        type: string
+      description:
+        type: string
+      id:
+        type: string
+      name:
+        type: string
+      organisation_id:
+        type: string
+      updated_at:
+        type: string
+      updated_by:
+        type: string
+    required:
+    - created_at
+    - created_by
+    - deleted_at
+    - deleted_by
+    - description
+    - id
+    - name
+    - organisation_id
+    - updated_at
+    - updated_by
+    type: object
+  models.WorkspaceDetail:
+    properties:
+      columns:
+        items:
+          $ref: '#/definitions/models.ColumnWithTasks'
+        type: array
+      created_at:
+        type: string
+      description:
+        type: string
+      id:
+        type: string
+      name:
+        type: string
+      role:
+        description: |-
+          Role is the current user's effective role on the workspace as a whole
+          ('edit' or 'view'), i.e. whether they can create columns.
+        type: string
+      updated_at:
+        type: string
+    required:
+    - columns
+    - created_at
+    - description
+    - id
+    - name
+    - role
+    - updated_at
+    type: object
+  utils.CreateResponse:
+    properties:
+      id:
+        type: string
+      status:
+        type: string
+    required:
+    - status
+    type: object
+  utils.ErrorResponse:
+    properties:
+      args:
+        items:
+          type: string
+        type: array
+      error:
+        type: string
+    required:
+    - args
+    - error
+    type: object
+  utils.UpdateResponse:
+    properties:
+      status:
+        type: string
+    required:
+    - status
+    type: object
+host: localhost:3000
+info:
+  contact: {}
+  description: REST API for the Kanbano kanban application (workspaces, columns, tasks,
+    tags, organisations, users).
+  title: Kanbano API
+  version: "1.0"
+paths:
+  /../webhooks/brevo:
+    post:
+      consumes:
+      - application/json
+      description: Receives Brevo email event callbacks (bounce, spam, etc.), authenticated
+        via a "token" query param, and relays failures to Discord if configured.
+      parameters:
+      - description: Shared webhook secret
+        in: query
+        name: token
+        required: true
+        type: string
+      - description: Brevo event payload
+        in: body
+        name: body
+        required: true
+        schema:
+          $ref: '#/definitions/handler.brevoEvent'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/utils.ErrorResponse'
+        "401":
+          description: Unauthorized
+          schema:
+            $ref: '#/definitions/utils.ErrorResponse'
+        "415":
+          description: Unsupported Media Type
+          schema:
+            $ref: '#/definitions/utils.ErrorResponse'
+      summary: Brevo transactional email webhook
+      tags:
+      - brevo
+  /admin/logs:
+    get:
+      parameters:
+      - description: info, warning or error
+        in: query
+        name: level
+        type: string
+      - description: Page size (default 50, max 200)
+        in: query
+        name: limit
+        type: integer
+      - description: Page offset (default 0)
+        in: query
+        name: offset
+        type: integer
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            items:
+              $ref: '#/definitions/models.Log'
+            type: array
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/utils.ErrorResponse'
+        "401":
+          description: Unauthorized
+          schema:
+            $ref: '#/definitions/utils.ErrorResponse'
+        "403":
+          description: Forbidden
+          schema:
+            $ref: '#/definitions/utils.ErrorResponse'
+        "500":
+          description: Internal Server Error
+          schema:
+            $ref: '#/definitions/utils.ErrorResponse'
+      security:
+      - BearerAuth: []
+      summary: List request/error logs (admin only)
+      tags:
+      - log
+  /me:
+    get:
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/handler.meResponse'
+        "401":
+          description: Unauthorized
+          schema:
+            $ref: '#/definitions/utils.ErrorResponse'
+        "404":
+          description: Not Found
+          schema:
+            $ref: '#/definitions/utils.ErrorResponse'
+        "500":
+          description: Internal Server Error
+          schema:
+            $ref: '#/definitions/utils.ErrorResponse'
+      security:
+      - BearerAuth: []
+      summary: Get the current user
+      tags:
+      - user
+    patch:
+      consumes:
+      - application/json
+      parameters:
+      - description: Fields to update
+        in: body
+        name: body
+        required: true
+        schema:
+          $ref: '#/definitions/handler.updateMeBody'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/utils.UpdateResponse'
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/utils.ErrorResponse'
+        "401":
+          description: Unauthorized
+          schema:
+            $ref: '#/definitions/utils.ErrorResponse'
+        "404":
+          description: Not Found
+          schema:
+            $ref: '#/definitions/utils.ErrorResponse'
+        "422":
+          description: Unprocessable Entity
+          schema:
+            additionalProperties: true
+            type: object
+        "500":
+          description: Internal Server Error
+          schema:
+            $ref: '#/definitions/utils.ErrorResponse'
+      security:
+      - BearerAuth: []
+      summary: Update the current user
+      tags:
+      - user
+  /me/avatar:
+    delete:
+      responses:
+        "204":
+          description: No Content
+        "401":
+          description: Unauthorized
+          schema:
+            $ref: '#/definitions/utils.ErrorResponse'
+        "404":
+          description: Not Found
+          schema:
+            $ref: '#/definitions/utils.ErrorResponse'
+        "500":
+          description: Internal Server Error
+          schema:
+            $ref: '#/definitions/utils.ErrorResponse'
+        "503":
+          description: Service Unavailable
+          schema:
+            $ref: '#/definitions/utils.ErrorResponse'
+      security:
+      - BearerAuth: []
+      summary: Delete the current user's avatar
+      tags:
+      - user
+    put:
+      consumes:
+      - multipart/form-data
+      description: Multipart upload, form field "file" (max 5 MiB). Generates AVIF/WebP/PNG
+        derivatives.
+      parameters:
+      - description: Avatar image
+        in: formData
+        name: file
+        required: true
+        type: file
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/utils.UpdateResponse'
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/utils.ErrorResponse'
+        "401":
+          description: Unauthorized
+          schema:
+            $ref: '#/definitions/utils.ErrorResponse'
+        "404":
+          description: Not Found
+          schema:
+            $ref: '#/definitions/utils.ErrorResponse'
+        "500":
+          description: Internal Server Error
+          schema:
+            $ref: '#/definitions/utils.ErrorResponse'
+        "503":
+          description: Service Unavailable
+          schema:
+            $ref: '#/definitions/utils.ErrorResponse'
+      security:
+      - BearerAuth: []
+      summary: Upload the current user's avatar
+      tags:
+      - user
+  /organisation:
+    get:
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/handler.organisationResponse'
+        "401":
+          description: Unauthorized
+          schema:
+            $ref: '#/definitions/utils.ErrorResponse'
+        "404":
+          description: Not Found
+          schema:
+            $ref: '#/definitions/utils.ErrorResponse'
+        "500":
+          description: Internal Server Error
+          schema:
+            $ref: '#/definitions/utils.ErrorResponse'
+      security:
+      - BearerAuth: []
+      summary: Get the current user's organisation
+      tags:
+      - organisation
+  /organisation/invitations:
+    post:
+      consumes:
+      - application/json
+      description: Sends an organization-level invitation, or a scoped invitation
+        when workspace_id, column_id, and task_id are all provided together.
+      parameters:
+      - description: Invitation to create
+        in: body
+        name: body
+        required: true
+        schema:
+          $ref: '#/definitions/handler.inviteBody'
+      produces:
+      - application/json
+      responses:
+        "201":
+          description: Created
+          schema:
+            $ref: '#/definitions/utils.CreateResponse'
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/utils.ErrorResponse'
+        "401":
+          description: Unauthorized
+          schema:
+            $ref: '#/definitions/utils.ErrorResponse'
+        "404":
+          description: Not Found
+          schema:
+            $ref: '#/definitions/utils.ErrorResponse'
+        "409":
+          description: Conflict
+          schema:
+            $ref: '#/definitions/utils.ErrorResponse'
+        "422":
+          description: Unprocessable Entity
+          schema:
+            additionalProperties: true
+            type: object
+        "500":
+          description: Internal Server Error
+          schema:
+            $ref: '#/definitions/utils.ErrorResponse'
+      security:
+      - BearerAuth: []
+      summary: Invite a member
+      tags:
+      - organization
+  /organisation/invitations/{id}:
+    patch:
+      consumes:
+      - application/json
+      parameters:
+      - description: Invitation ID
+        in: path
+        name: id
+        required: true
+        type: string
+      - description: New status
+        in: body
+        name: body
+        required: true
+        schema:
+          $ref: '#/definitions/handler.updateInvitationBody'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/utils.UpdateResponse'
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/utils.ErrorResponse'
+        "401":
+          description: Unauthorized
+          schema:
+            $ref: '#/definitions/utils.ErrorResponse'
+        "404":
+          description: Not Found
+          schema:
+            $ref: '#/definitions/utils.ErrorResponse'
+        "422":
+          description: Unprocessable Entity
+          schema:
+            additionalProperties: true
+            type: object
+        "500":
+          description: Internal Server Error
+          schema:
+            $ref: '#/definitions/utils.ErrorResponse'
+      security:
+      - BearerAuth: []
+      summary: Accept or decline an invitation
+      tags:
+      - organisation
+  /organisation/invitations/received:
+    get:
+      parameters:
+      - description: Page size (default 50, max 200)
+        in: query
+        name: limit
+        type: integer
+      - description: Page offset (default 0)
+        in: query
+        name: offset
+        type: integer
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            items:
+              $ref: '#/definitions/models.OrganisationInvitation'
+            type: array
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/utils.ErrorResponse'
+        "401":
+          description: Unauthorized
+          schema:
+            $ref: '#/definitions/utils.ErrorResponse'
+        "404":
+          description: Not Found
+          schema:
+            $ref: '#/definitions/utils.ErrorResponse'
+        "500":
+          description: Internal Server Error
+          schema:
+            $ref: '#/definitions/utils.ErrorResponse'
+      security:
+      - BearerAuth: []
+      summary: List invitations received by the current user
+      tags:
+      - organisation
+  /organisation/invitations/sent:
+    get:
+      parameters:
+      - description: Page size (default 50, max 200)
+        in: query
+        name: limit
+        type: integer
+      - description: Page offset (default 0)
+        in: query
+        name: offset
+        type: integer
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            items:
+              $ref: '#/definitions/models.OrganisationInvitation'
+            type: array
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/utils.ErrorResponse'
+        "401":
+          description: Unauthorized
+          schema:
+            $ref: '#/definitions/utils.ErrorResponse'
+        "404":
+          description: Not Found
+          schema:
+            $ref: '#/definitions/utils.ErrorResponse'
+        "500":
+          description: Internal Server Error
+          schema:
+            $ref: '#/definitions/utils.ErrorResponse'
+      security:
+      - BearerAuth: []
+      summary: List invitations sent by the organisation
+      tags:
+      - organisation
+  /tags:
+    get:
+      parameters:
+      - description: Page size (default 50, max 200)
+        in: query
+        name: limit
+        type: integer
+      - description: Page offset (default 0)
+        in: query
+        name: offset
+        type: integer
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            items:
+              $ref: '#/definitions/models.Tag'
+            type: array
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/utils.ErrorResponse'
+        "401":
+          description: Unauthorized
+          schema:
+            $ref: '#/definitions/utils.ErrorResponse'
+        "500":
+          description: Internal Server Error
+          schema:
+            $ref: '#/definitions/utils.ErrorResponse'
+      security:
+      - BearerAuth: []
+      summary: List tags
+      tags:
+      - tag
+    post:
+      consumes:
+      - application/json
+      parameters:
+      - description: Tag to create
+        in: body
+        name: body
+        required: true
+        schema:
+          $ref: '#/definitions/handler.createTagBody'
+      produces:
+      - application/json
+      responses:
+        "201":
+          description: Created
+          schema:
+            $ref: '#/definitions/utils.CreateResponse'
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/utils.ErrorResponse'
+        "401":
+          description: Unauthorized
+          schema:
+            $ref: '#/definitions/utils.ErrorResponse'
+        "422":
+          description: Unprocessable Entity
+          schema:
+            additionalProperties: true
+            type: object
+        "500":
+          description: Internal Server Error
+          schema:
+            $ref: '#/definitions/utils.ErrorResponse'
+      security:
+      - BearerAuth: []
+      summary: Create a tag
+      tags:
+      - tag
+  /tags/{id}:
+    patch:
+      consumes:
+      - application/json
+      parameters:
+      - description: Tag ID
+        in: path
+        name: id
+        required: true
+        type: string
+      - description: Fields to update
+        in: body
+        name: body
+        required: true
+        schema:
+          $ref: '#/definitions/handler.updateTagBody'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/utils.UpdateResponse'
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/utils.ErrorResponse'
+        "401":
+          description: Unauthorized
+          schema:
+            $ref: '#/definitions/utils.ErrorResponse'
+        "404":
+          description: Not Found
+          schema:
+            $ref: '#/definitions/utils.ErrorResponse'
+        "422":
+          description: Unprocessable Entity
+          schema:
+            additionalProperties: true
+            type: object
+        "500":
+          description: Internal Server Error
+          schema:
+            $ref: '#/definitions/utils.ErrorResponse'
+      security:
+      - BearerAuth: []
+      summary: Update a tag
+      tags:
+      - tag
+  /workspaces:
+    get:
+      description: 'List the current user''s workspaces. The response shape depends
+        on which query params are set (checked in this order): 1) q set -> returns
+        []models.WorkspaceSearchResult (search results); 2) view=names -> returns
+        []models.WorkspaceName (id+name only); 3) view=recent -> returns []models.Workspace
+        (most recently accessed, unpaginated); 4) none of the above -> returns []models.Workspace,
+        paginated via limit/offset. Only one variant applies per request; q takes
+        priority over view.'
+      parameters:
+      - description: Search query. When set, returns []models.WorkspaceSearchResult
+          regardless of other params.
+        in: query
+        name: q
+        type: string
+      - description: names or recent. 'names' returns []models.WorkspaceName, 'recent'
+          returns []models.Workspace unpaginated. Ignored if q is set.
+        in: query
+        name: view
+        type: string
+      - description: Page size (default 50, max 200). Only applies to the default
+          paginated view.
+        in: query
+        name: limit
+        type: integer
+      - description: Page offset (default 0). Only applies to the default paginated
+          view.
+        in: query
+        name: offset
+        type: integer
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: Default paginated view, or view=recent
+          schema:
+            items:
+              $ref: '#/definitions/models.Workspace'
+            type: array
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/utils.ErrorResponse'
+        "401":
+          description: Unauthorized
+          schema:
+            $ref: '#/definitions/utils.ErrorResponse'
+        "500":
+          description: Internal Server Error
+          schema:
+            $ref: '#/definitions/utils.ErrorResponse'
+      security:
+      - BearerAuth: []
+      summary: List workspaces
+      tags:
+      - workspace
+    post:
+      consumes:
+      - application/json
+      parameters:
+      - description: Workspace to create
+        in: body
+        name: body
+        required: true
+        schema:
+          $ref: '#/definitions/handler.createWorkspaceBody'
+      produces:
+      - application/json
+      responses:
+        "201":
+          description: Created
+          schema:
+            $ref: '#/definitions/utils.CreateResponse'
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/utils.ErrorResponse'
+        "401":
+          description: Unauthorized
+          schema:
+            $ref: '#/definitions/utils.ErrorResponse'
+        "422":
+          description: Unprocessable Entity
+          schema:
+            additionalProperties: true
+            type: object
+        "500":
+          description: Internal Server Error
+          schema:
+            $ref: '#/definitions/utils.ErrorResponse'
+      security:
+      - BearerAuth: []
+      summary: Create a workspace
+      tags:
+      - workspace
+  /workspaces/{id}:
+    delete:
+      description: Soft-deletes a workspace.
+      parameters:
+      - description: Workspace ID
+        in: path
+        name: id
+        required: true
+        type: string
+      responses:
+        "204":
+          description: No Content
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/utils.ErrorResponse'
+        "401":
+          description: Unauthorized
+          schema:
+            $ref: '#/definitions/utils.ErrorResponse'
+        "404":
+          description: Not Found
+          schema:
+            $ref: '#/definitions/utils.ErrorResponse'
+        "500":
+          description: Internal Server Error
+          schema:
+            $ref: '#/definitions/utils.ErrorResponse'
+      security:
+      - BearerAuth: []
+      summary: Delete a workspace
+      tags:
+      - workspace
+    get:
+      description: Get a workspace's full detail (columns and tasks included).
+      parameters:
+      - description: Workspace ID
+        in: path
+        name: id
+        required: true
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/models.WorkspaceDetail'
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/utils.ErrorResponse'
+        "401":
+          description: Unauthorized
+          schema:
+            $ref: '#/definitions/utils.ErrorResponse'
+        "404":
+          description: Not Found
+          schema:
+            $ref: '#/definitions/utils.ErrorResponse'
+        "500":
+          description: Internal Server Error
+          schema:
+            $ref: '#/definitions/utils.ErrorResponse'
+      security:
+      - BearerAuth: []
+      summary: Get a workspace
+      tags:
+      - workspace
+    patch:
+      consumes:
+      - application/json
+      parameters:
+      - description: Workspace ID
+        in: path
+        name: id
+        required: true
+        type: string
+      - description: Fields to update
+        in: body
+        name: body
+        required: true
+        schema:
+          $ref: '#/definitions/handler.updateWorkspaceBody'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/utils.UpdateResponse'
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/utils.ErrorResponse'
+        "401":
+          description: Unauthorized
+          schema:
+            $ref: '#/definitions/utils.ErrorResponse'
+        "404":
+          description: Not Found
+          schema:
+            $ref: '#/definitions/utils.ErrorResponse'
+        "422":
+          description: Unprocessable Entity
+          schema:
+            additionalProperties: true
+            type: object
+        "500":
+          description: Internal Server Error
+          schema:
+            $ref: '#/definitions/utils.ErrorResponse'
+      security:
+      - BearerAuth: []
+      summary: Update a workspace
+      tags:
+      - workspace
+  /workspaces/{id}/columns:
+    post:
+      consumes:
+      - application/json
+      parameters:
+      - description: Workspace ID
+        in: path
+        name: id
+        required: true
+        type: string
+      - description: Column to create
+        in: body
+        name: body
+        required: true
+        schema:
+          $ref: '#/definitions/handler.createColumnBody'
+      produces:
+      - application/json
+      responses:
+        "201":
+          description: Created
+          schema:
+            $ref: '#/definitions/utils.CreateResponse'
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/utils.ErrorResponse'
+        "401":
+          description: Unauthorized
+          schema:
+            $ref: '#/definitions/utils.ErrorResponse'
+        "404":
+          description: Not Found
+          schema:
+            $ref: '#/definitions/utils.ErrorResponse'
+        "422":
+          description: Unprocessable Entity
+          schema:
+            additionalProperties: true
+            type: object
+        "500":
+          description: Internal Server Error
+          schema:
+            $ref: '#/definitions/utils.ErrorResponse'
+      security:
+      - BearerAuth: []
+      summary: Create a column
+      tags:
+      - column
+  /workspaces/{id}/columns/{columnId}:
+    delete:
+      description: Soft-deletes a column.
+      parameters:
+      - description: Workspace ID
+        in: path
+        name: id
+        required: true
+        type: string
+      - description: Column ID
+        in: path
+        name: columnId
+        required: true
+        type: string
+      responses:
+        "204":
+          description: No Content
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/utils.ErrorResponse'
+        "401":
+          description: Unauthorized
+          schema:
+            $ref: '#/definitions/utils.ErrorResponse'
+        "404":
+          description: Not Found
+          schema:
+            $ref: '#/definitions/utils.ErrorResponse'
+        "500":
+          description: Internal Server Error
+          schema:
+            $ref: '#/definitions/utils.ErrorResponse'
+      security:
+      - BearerAuth: []
+      summary: Delete a column
+      tags:
+      - column
+    patch:
+      consumes:
+      - application/json
+      parameters:
+      - description: Workspace ID
+        in: path
+        name: id
+        required: true
+        type: string
+      - description: Column ID
+        in: path
+        name: columnId
+        required: true
+        type: string
+      - description: Fields to update
+        in: body
+        name: body
+        required: true
+        schema:
+          $ref: '#/definitions/handler.updateColumnBody'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/utils.UpdateResponse'
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/utils.ErrorResponse'
+        "401":
+          description: Unauthorized
+          schema:
+            $ref: '#/definitions/utils.ErrorResponse'
+        "404":
+          description: Not Found
+          schema:
+            $ref: '#/definitions/utils.ErrorResponse'
+        "422":
+          description: Unprocessable Entity
+          schema:
+            additionalProperties: true
+            type: object
+        "500":
+          description: Internal Server Error
+          schema:
+            $ref: '#/definitions/utils.ErrorResponse'
+      security:
+      - BearerAuth: []
+      summary: Update or reorder a column
+      tags:
+      - column
+  /workspaces/{id}/columns/{columnId}/tasks:
+    post:
+      consumes:
+      - application/json
+      parameters:
+      - description: Workspace ID
+        in: path
+        name: id
+        required: true
+        type: string
+      - description: Column ID
+        in: path
+        name: columnId
+        required: true
+        type: string
+      - description: Task to create
+        in: body
+        name: body
+        required: true
+        schema:
+          $ref: '#/definitions/handler.createTaskBody'
+      produces:
+      - application/json
+      responses:
+        "201":
+          description: Created
+          schema:
+            $ref: '#/definitions/utils.CreateResponse'
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/utils.ErrorResponse'
+        "401":
+          description: Unauthorized
+          schema:
+            $ref: '#/definitions/utils.ErrorResponse'
+        "404":
+          description: Not Found
+          schema:
+            $ref: '#/definitions/utils.ErrorResponse'
+        "422":
+          description: Unprocessable Entity
+          schema:
+            additionalProperties: true
+            type: object
+        "500":
+          description: Internal Server Error
+          schema:
+            $ref: '#/definitions/utils.ErrorResponse'
+      security:
+      - BearerAuth: []
+      summary: Create a task
+      tags:
+      - task
+  /workspaces/{id}/columns/{columnId}/tasks/{taskId}:
+    delete:
+      description: Soft-deletes a task.
+      parameters:
+      - description: Workspace ID
+        in: path
+        name: id
+        required: true
+        type: string
+      - description: Column ID
+        in: path
+        name: columnId
+        required: true
+        type: string
+      - description: Task ID
+        in: path
+        name: taskId
+        required: true
+        type: string
+      responses:
+        "204":
+          description: No Content
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/utils.ErrorResponse'
+        "401":
+          description: Unauthorized
+          schema:
+            $ref: '#/definitions/utils.ErrorResponse'
+        "404":
+          description: Not Found
+          schema:
+            $ref: '#/definitions/utils.ErrorResponse'
+        "500":
+          description: Internal Server Error
+          schema:
+            $ref: '#/definitions/utils.ErrorResponse'
+      security:
+      - BearerAuth: []
+      summary: Delete a task
+      tags:
+      - task
+    patch:
+      consumes:
+      - application/json
+      parameters:
+      - description: Workspace ID
+        in: path
+        name: id
+        required: true
+        type: string
+      - description: Column ID
+        in: path
+        name: columnId
+        required: true
+        type: string
+      - description: Task ID
+        in: path
+        name: taskId
+        required: true
+        type: string
+      - description: Fields to update
+        in: body
+        name: body
+        required: true
+        schema:
+          $ref: '#/definitions/handler.updateTaskBody'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/utils.UpdateResponse'
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/utils.ErrorResponse'
+        "401":
+          description: Unauthorized
+          schema:
+            $ref: '#/definitions/utils.ErrorResponse'
+        "404":
+          description: Not Found
+          schema:
+            $ref: '#/definitions/utils.ErrorResponse'
+        "422":
+          description: Unprocessable Entity
+          schema:
+            additionalProperties: true
+            type: object
+        "500":
+          description: Internal Server Error
+          schema:
+            $ref: '#/definitions/utils.ErrorResponse'
+      security:
+      - BearerAuth: []
+      summary: Update or move a task
+      tags:
+      - task
+  /workspaces/{id}/columns/{columnId}/tasks/{taskId}/assignees:
+    get:
+      parameters:
+      - description: Workspace ID
+        in: path
+        name: id
+        required: true
+        type: string
+      - description: Column ID
+        in: path
+        name: columnId
+        required: true
+        type: string
+      - description: Task ID
+        in: path
+        name: taskId
+        required: true
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            items:
+              $ref: '#/definitions/models.TaskAssignee'
+            type: array
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/utils.ErrorResponse'
+        "401":
+          description: Unauthorized
+          schema:
+            $ref: '#/definitions/utils.ErrorResponse'
+        "404":
+          description: Not Found
+          schema:
+            $ref: '#/definitions/utils.ErrorResponse'
+        "500":
+          description: Internal Server Error
+          schema:
+            $ref: '#/definitions/utils.ErrorResponse'
+      security:
+      - BearerAuth: []
+      summary: List a task's assignees
+      tags:
+      - task
+    post:
+      consumes:
+      - application/json
+      description: The member must already have access to the task's column.
+      parameters:
+      - description: Workspace ID
+        in: path
+        name: id
+        required: true
+        type: string
+      - description: Column ID
+        in: path
+        name: columnId
+        required: true
+        type: string
+      - description: Task ID
+        in: path
+        name: taskId
+        required: true
+        type: string
+      - description: Member to assign
+        in: body
+        name: body
+        required: true
+        schema:
+          $ref: '#/definitions/handler.assignTaskBody'
+      produces:
+      - application/json
+      responses:
+        "204":
+          description: No Content
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/utils.ErrorResponse'
+        "401":
+          description: Unauthorized
+          schema:
+            $ref: '#/definitions/utils.ErrorResponse'
+        "404":
+          description: Not Found
+          schema:
+            $ref: '#/definitions/utils.ErrorResponse'
+        "422":
+          description: Unprocessable Entity
+          schema:
+            additionalProperties: true
+            type: object
+        "500":
+          description: Internal Server Error
+          schema:
+            $ref: '#/definitions/utils.ErrorResponse'
+      security:
+      - BearerAuth: []
+      summary: Assign a member to a task
+      tags:
+      - task
+  /workspaces/{id}/columns/{columnId}/tasks/{taskId}/assignees/{memberId}:
+    delete:
+      parameters:
+      - description: Workspace ID
+        in: path
+        name: id
+        required: true
+        type: string
+      - description: Column ID
+        in: path
+        name: columnId
+        required: true
+        type: string
+      - description: Task ID
+        in: path
+        name: taskId
+        required: true
+        type: string
+      - description: Member ID
+        in: path
+        name: memberId
+        required: true
+        type: string
+      responses:
+        "204":
+          description: No Content
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/utils.ErrorResponse'
+        "401":
+          description: Unauthorized
+          schema:
+            $ref: '#/definitions/utils.ErrorResponse'
+        "404":
+          description: Not Found
+          schema:
+            $ref: '#/definitions/utils.ErrorResponse'
+        "500":
+          description: Internal Server Error
+          schema:
+            $ref: '#/definitions/utils.ErrorResponse'
+      security:
+      - BearerAuth: []
+      summary: Unassign a member from a task
+      tags:
+      - task
+  /workspaces/{id}/columns/names:
+    get:
+      parameters:
+      - description: Workspace ID
+        in: path
+        name: id
+        required: true
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            items:
+              $ref: '#/definitions/models.ColumnName'
+            type: array
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/utils.ErrorResponse'
+        "401":
+          description: Unauthorized
+          schema:
+            $ref: '#/definitions/utils.ErrorResponse'
+        "404":
+          description: Not Found
+          schema:
+            $ref: '#/definitions/utils.ErrorResponse'
+        "500":
+          description: Internal Server Error
+          schema:
+            $ref: '#/definitions/utils.ErrorResponse'
+      security:
+      - BearerAuth: []
+      summary: List column names
+      tags:
+      - column
+  /ws:
+    get:
+      description: Upgrades to a WebSocket connection. The JWT is passed via the Sec-WebSocket-Protocol
+        header as "bearer, <token>" (not a normal Authorization header, so no BearerAuth
+        security scheme applies here).
+      responses:
+        "101":
+          description: Switching Protocols
+        "401":
+          description: missing or invalid token
+          schema:
+            type: string
+      summary: WebSocket connection for real-time updates
+      tags:
+      - ws
+securityDefinitions:
+  BearerAuth:
+    description: Neon Auth JWT (EdDSA), sent as "Bearer <token>".
+    in: header
+    name: Authorization
+    type: apiKey
+swagger: "2.0"

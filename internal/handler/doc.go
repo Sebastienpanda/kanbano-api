@@ -1,3 +1,3 @@
-// Package handler contient les handlers HTTP de l'API : décodage/validation des
-// requêtes, appel des repositories, et sérialisation des réponses JSON.
+// Package handler contains the API's HTTP handlers: request decoding/validation,
+// repository calls, and JSON response serialization.
 package handler

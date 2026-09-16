@@ -118,14 +118,14 @@ func (h *UserHandler) UploadAvatar(w http.ResponseWriter, r *http.Request) {
 	r.Body = http.MaxBytesReader(w, r.Body, maxAvatarUpload)
 	file, _, err := r.FormFile("file")
 	if err != nil {
-		badRequest(w, "missing file")
+		badRequest(w, r, "missing file")
 		return
 	}
 	defer func() { _ = file.Close() }()
 
 	derivatives, err := media.AvatarDerivatives(file)
 	if err != nil {
-		badRequest(w, "invalid image")
+		badRequest(w, r, "invalid image")
 		return
 	}
 

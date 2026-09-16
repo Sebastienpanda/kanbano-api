@@ -18,7 +18,7 @@ import (
 func main() {
 	_ = godotenv.Load()
 
-	fmt.Println("kanbano-cli — tape 'help' pour la liste des commands, 'exit' pour quitter.")
+	fmt.Println("kanbano-cli — type 'help' for the list of commands, 'exit' to quit.")
 
 	scanner := bufio.NewScanner(os.Stdin)
 	for {
@@ -56,32 +56,32 @@ func main() {
 		case "scaffold":
 			scaffold(rest)
 		default:
-			fmt.Printf("commande inconnue : %q — tape 'help'\n", cmd)
+			fmt.Printf("unknown command: %q — type 'help'\n", cmd)
 		}
 	}
 }
 
 func printHelp() {
-	fmt.Println(`Commands disponibles :
-  help                          affiche cette aide
-  migrate-up                    applique les migrations en attente
-  migrate-down                  annule la dernière migration
-  migrate-status                affiche la version de migration courante
-  migrate-create <name>         crée une nouvelle paire de fichiers de migration
-  install-hooks                 configure git pour utiliser .githooks
-  routes                        liste toutes les routes HTTP enregistrées
-  scaffold <name> [layers]      génère handler/repository/model/routes pour <name>
-  exit                          quitte le CLI`)
+	fmt.Println(`Available commands:
+  help                          shows this help
+  migrate-up                    applies pending migrations
+  migrate-down                  rolls back the last migration
+  migrate-status                shows the current migration version
+  migrate-create <name>         creates a new pair of migration files
+  install-hooks                 configures git to use .githooks
+  routes                        lists all registered HTTP routes
+  scaffold <name> [layers]      generates handler/repository/model/routes for <name>
+  exit                          quits the CLI`)
 }
 
 func runMigrate(action string) {
 	dbURL := os.Getenv("DATABASE_URL_MIGRATE")
 	if dbURL == "" {
-		fmt.Println("DATABASE_URL_MIGRATE n'est pas défini (vérifie ton .env)")
+		fmt.Println("DATABASE_URL_MIGRATE is not set (check your .env)")
 		return
 	}
-	// CLI dev local : dbURL vient du .env de l'opérateur, action est une constante interne.
-	//nolint:gosec // outil interne, pas exposé réseau
+	// Local dev CLI: dbURL comes from the operator's .env, action is an internal constant.
+	//nolint:gosec // internal tool, not exposed over the network
 	run(exec.CommandContext(context.Background(), "migrate", "-path", "internal/db/migrations", "-database", dbURL, action))
 }
 
@@ -90,8 +90,8 @@ func migrateCreate(args []string) {
 		fmt.Println("usage: migrate-create <name>")
 		return
 	}
-	// CLI dev local : args[0] vient de la saisie de l'opérateur au terminal.
-	//nolint:gosec // outil interne, pas exposé réseau
+	// Local dev CLI: args[0] comes from the operator's terminal input.
+	//nolint:gosec // internal tool, not exposed over the network
 	run(exec.CommandContext(context.Background(), "migrate", "create", "-ext", "sql", "-dir", "internal/db/migrations", "-seq", args[0]))
 }
 
@@ -140,7 +140,7 @@ func printRoutes() {
 	}
 }
 
-// routeGroup renvoie le premier segment du chemin après /api/v1/, ex.
+// routeGroup returns the first path segment after /api/v1/, e.g.
 // "/api/v1/organisation/invitations/{id}" -> "organisation".
 func routeGroup(route string) string {
 	trimmed := strings.TrimPrefix(route, "/api/v1/")
@@ -148,25 +148,25 @@ func routeGroup(route string) string {
 	if trimmed == "" {
 		return "/"
 	}
-	if idx := strings.Index(trimmed, "/"); idx != -1 {
-		return trimmed[:idx]
+	if before, _, ok := strings.Cut(trimmed, "/"); ok {
+		return before
 	}
 	return trimmed
 }
 
 const (
 	colorReset  = "\033[0m"
-	colorGet    = "\033[32m"  // vert
-	colorPost   = "\033[33m"  // jaune
-	colorPut    = "\033[34m"  // bleu
+	colorGet    = "\033[32m"  // green
+	colorPost   = "\033[33m"  // yellow
+	colorPut    = "\033[34m"  // blue
 	colorPatch  = "\033[36m"  // cyan
-	colorDelete = "\033[31m"  // rouge
-	colorHeader = "\033[1;4m" // gras souligné
-	colorGray   = "\033[90m"  // gris
+	colorDelete = "\033[31m"  // red
+	colorHeader = "\033[1;4m" // bold underline
+	colorGray   = "\033[90m"  // gray
 	colorParam  = "\033[35m"  // magenta
 )
 
-// colorPath grise le chemin et met en évidence les paramètres {xxx} en magenta.
+// colorPath grays out the path and highlights {xxx} parameters in magenta.
 func colorPath(path string) string {
 	segments := strings.Split(path, "/")
 	for i, seg := range segments {
@@ -177,8 +177,8 @@ func colorPath(path string) string {
 	return colorGray + strings.Join(segments, "/") + colorReset
 }
 
-// colorBodyField formatte un champ de body : nom en cyan clair, type en gris,
-// et un astérisque rouge s'il est requis.
+// colorBodyField formats a body field: name in light cyan, type in gray,
+// and a red asterisk if required.
 func colorBodyField(f bodyField) string {
 	marker := ""
 	if f.required {
@@ -216,8 +216,8 @@ func scaffold(args []string) {
 	if len(args) > 1 {
 		layers = args[1]
 	}
-	// CLI dev local : name/layers viennent de la saisie de l'opérateur au terminal.
-	//nolint:gosec // outil interne, pas exposé réseau
+	// Local dev CLI: name/layers come from the operator's terminal input.
+	//nolint:gosec // internal tool, not exposed over the network
 	run(exec.CommandContext(context.Background(), "bash", "scripts/scaffold.sh", name, layers))
 }
 
@@ -226,6 +226,6 @@ func run(c *exec.Cmd) {
 	c.Stderr = os.Stderr
 	c.Stdin = os.Stdin
 	if err := c.Run(); err != nil {
-		fmt.Printf("erreur : %v\n", err)
+		fmt.Printf("error: %v\n", err)
 	}
 }

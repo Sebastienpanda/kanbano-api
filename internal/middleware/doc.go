@@ -1,3 +1,3 @@
-// Package middleware fournit les middlewares HTTP partagés : authentification
-// JWT (Neon Auth), contrôle admin, journalisation des requêtes, request ID.
+// Package middleware provides the shared HTTP middlewares: JWT authentication
+// (Neon Auth), admin checks, request logging, request ID.
 package middleware

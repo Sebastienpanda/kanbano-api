@@ -58,7 +58,7 @@ func newHandlers(repos repositories, store *storage.Client, hub *ws.Hub) handler
 
 	return handlers{
 		workspace: handler.NewWorkspaceHandler(repos.workspace, store, hub),
-		column:    handler.NewColumnHandler(repos.column, repos.workspace, hub),
+		column:    handler.NewColumnHandler(repos.column, repos.workspace, repos.accessGrant, hub),
 		task: handler.NewTaskHandler(handler.TaskHandlerDeps{
 			Repo:          repos.task,
 			WorkspaceRepo: repos.workspace,
@@ -92,11 +92,11 @@ func newHandlers(repos repositories, store *storage.Client, hub *ws.Hub) handler
 func RegisterRoutes(r *chi.Mux, pool *pgxpool.Pool, store *storage.Client) {
 	hub := ws.NewHub()
 	repos := newRepositories(pool)
-	handler.InitLogRepository(repos.log)
 	h := newHandlers(repos, store, hub)
 
 	r.Route("/api/v1", func(r chi.Router) {
 		r.Get("/ws", h.ws.Serve)
+		SwaggerRoutes(r)
 
 		r.Group(func(r chi.Router) {
 			r.Use(middleware.AuthRequired)

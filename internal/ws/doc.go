@@ -1,3 +1,3 @@
-// Package ws gère les connexions WebSocket et la diffusion d'événements
-// temps réel aux clients connectés.
+// Package ws manages WebSocket connections and broadcasts real-time events
+// to connected clients.
 package ws

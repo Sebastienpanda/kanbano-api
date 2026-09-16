@@ -1,3 +1,3 @@
-// Package models définit les structures de données partagées entre repositories
-// et handlers, mappées depuis PostgreSQL via pgx.RowToStructByName.
+// Package models defines the data structures shared between repositories
+// and handlers, mapped from PostgreSQL via pgx.RowToStructByName.
 package models

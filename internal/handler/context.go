@@ -19,7 +19,7 @@ func userIDFromContext(r *http.Request) uuid.UUID {
 func parseUUIDParam(w http.ResponseWriter, r *http.Request, param string) (uuid.UUID, bool) {
 	id, err := uuid.Parse(chi.URLParam(r, param))
 	if err != nil {
-		badRequest(w, "invalid "+param)
+		badRequest(w, r, "invalid "+param)
 		return uuid.UUID{}, false
 	}
 	return id, true
@@ -39,7 +39,7 @@ func requireWorkspace(w http.ResponseWriter, r *http.Request, workspaceRepo *rep
 		return userID, workspaceID, false
 	}
 	if !exists {
-		notFound(w, "workspace not found")
+		notFound(w, r, "workspace not found")
 		return userID, workspaceID, false
 	}
 

@@ -1,4 +1,4 @@
-// Package logging fournit le logger slog structuré partagé par toute l'application.
+// Package logging provides the structured slog logger shared across the whole application.
 package logging
 
 import (
@@ -6,8 +6,8 @@ import (
 	"os"
 )
 
-// Logger est le logger JSON structuré utilisé dans tout le projet.
-// Les données variables (erreurs, IDs, valeurs) doivent être passées en
-// attributes slog, jamais interpolées dans le message, pour garder des
-// messages stables et agrégeables par un outil de log.
+// Logger is the structured JSON logger used throughout the project.
+// Variable data (errors, IDs, values) must be passed as slog attributes,
+// never interpolated into the message, to keep messages stable and
+// aggregatable by a log tool.
 var Logger = slog.New(slog.NewJSONHandler(os.Stdout, nil))

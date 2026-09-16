@@ -16,7 +16,7 @@ const UserIDKey contextKey = "user_id"
 
 var jwks keyfunc.Keyfunc
 
-// ErrInvalidToken indique un jeton JWT absent, malformé, expiré ou dont la signature ne valide pas.
+// ErrInvalidToken indicates a JWT token that is missing, malformed, expired, or fails signature validation.
 var ErrInvalidToken = errors.New("invalid token")
 
 func InitJWKS(jwksURL string) error {

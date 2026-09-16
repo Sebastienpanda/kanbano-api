@@ -66,12 +66,12 @@ var validTaskStatuses = map[string]bool{
 	"Terminé":  true,
 }
 
-func validateStatus(w http.ResponseWriter, status *string) bool {
+func validateStatus(w http.ResponseWriter, r *http.Request, status *string) bool {
 	if status == nil || *status == "" {
 		return true
 	}
 	if !validTaskStatuses[*status] {
-		unprocessableEntity(w, "invalid status")
+		unprocessableEntity(w, r, "invalid status")
 		return false
 	}
 	return true
@@ -98,7 +98,7 @@ func (h *TaskHandler) resolveTagID(w http.ResponseWriter, r *http.Request, userI
 			return nil, false
 		}
 		if !exists {
-			notFound(w, "tag not found")
+			notFound(w, r, "tag not found")
 			return nil, false
 		}
 		return tagID, true
@@ -164,7 +164,7 @@ func (h *TaskHandler) parseTaskContext(w http.ResponseWriter, r *http.Request) (
 
 	columnID, err := uuid.Parse(chi.URLParam(r, "columnId"))
 	if err != nil {
-		badRequest(w, "invalid columnId")
+		badRequest(w, r, "invalid columnId")
 		return uuid.Nil, uuid.Nil, uuid.Nil, false
 	}
 
@@ -174,7 +174,7 @@ func (h *TaskHandler) parseTaskContext(w http.ResponseWriter, r *http.Request) (
 		return uuid.Nil, uuid.Nil, uuid.Nil, false
 	}
 	if !colExists {
-		notFound(w, "column not found")
+		notFound(w, r, "column not found")
 		return uuid.Nil, uuid.Nil, uuid.Nil, false
 	}
 
@@ -209,7 +209,17 @@ func (h *TaskHandler) Create(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	if !hasAccess {
-		notFound(w, "column not found")
+		notFound(w, r, "column not found")
+		return
+	}
+
+	hasEditAccess, err := h.accessGrant.HasColumnEditAccess(r.Context(), workspaceID, columnID, userID)
+	if err != nil {
+		serverError(w, r, err)
+		return
+	}
+	if !hasEditAccess {
+		forbidden(w, r, "edit access required")
 		return
 	}
 
@@ -217,7 +227,7 @@ func (h *TaskHandler) Create(w http.ResponseWriter, r *http.Request) {
 	if !ok {
 		return
 	}
-	if !validateStatus(w, body.Status) {
+	if !validateStatus(w, r, body.Status) {
 		return
 	}
 
@@ -251,7 +261,36 @@ func (h *TaskHandler) requireTaskAccess(w http.ResponseWriter, r *http.Request, 
 		return false
 	}
 	if !isAssigned {
-		notFound(w, "task not found")
+		notFound(w, r, "task not found")
+		return false
+	}
+	return true
+}
+
+// requireTaskEditAccess checks that the user holds an 'edit' role on the
+// task, either via the column's access grant or a direct task assignment.
+// Writes an error response and returns false if access is missing.
+func (h *TaskHandler) requireTaskEditAccess(w http.ResponseWriter, r *http.Request, workspaceID, columnID, taskID, userID uuid.UUID) bool {
+	if !h.requireTaskAccess(w, r, workspaceID, columnID, taskID, userID) {
+		return false
+	}
+
+	hasColumnEditAccess, err := h.accessGrant.HasColumnEditAccess(r.Context(), workspaceID, columnID, userID)
+	if err != nil {
+		serverError(w, r, err)
+		return false
+	}
+	if hasColumnEditAccess {
+		return true
+	}
+
+	hasAssigneeEditAccess, err := h.taskAssignee.HasEditAccess(r.Context(), taskID, userID)
+	if err != nil {
+		serverError(w, r, err)
+		return false
+	}
+	if !hasAssigneeEditAccess {
+		forbidden(w, r, "edit access required")
 		return false
 	}
 	return true
@@ -285,7 +324,7 @@ func (h *TaskHandler) Update(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	if !h.requireTaskAccess(w, r, workspaceID, columnID, taskID, userID) {
+	if !h.requireTaskEditAccess(w, r, workspaceID, columnID, taskID, userID) {
 		return
 	}
 
@@ -293,7 +332,7 @@ func (h *TaskHandler) Update(w http.ResponseWriter, r *http.Request) {
 	if !ok {
 		return
 	}
-	if !validateStatus(w, body.Status) {
+	if !validateStatus(w, r, body.Status) {
 		return
 	}
 
@@ -330,9 +369,9 @@ func (h *TaskHandler) Update(w http.ResponseWriter, r *http.Request) {
 	utils.RespondUpdated(w)
 }
 
-// validateTargetColumn vérifie que la colonne de destination d'un déplacement
-// existe dans le workspace et est accessible à l'utilisateur. Écrit une
-// réponse d'erreur et retourne false si l'une des vérifications échoue.
+// validateTargetColumn checks that the destination column of a move exists
+// in the workspace and is accessible to the user. Writes an error response
+// and returns false if either check fails.
 func (h *TaskHandler) validateTargetColumn(w http.ResponseWriter, r *http.Request, workspaceID, targetColumnID, userID uuid.UUID) bool {
 	colExists, err := h.columnRepo.Exists(r.Context(), targetColumnID, workspaceID)
 	if err != nil {
@@ -340,7 +379,7 @@ func (h *TaskHandler) validateTargetColumn(w http.ResponseWriter, r *http.Reques
 		return false
 	}
 	if !colExists {
-		notFound(w, "target column not found in this workspace")
+		notFound(w, r, "target column not found in this workspace")
 		return false
 	}
 
@@ -350,7 +389,17 @@ func (h *TaskHandler) validateTargetColumn(w http.ResponseWriter, r *http.Reques
 		return false
 	}
 	if !hasTargetAccess {
-		notFound(w, "target column not found in this workspace")
+		notFound(w, r, "target column not found in this workspace")
+		return false
+	}
+
+	hasTargetEditAccess, err := h.accessGrant.HasColumnEditAccess(r.Context(), workspaceID, targetColumnID, userID)
+	if err != nil {
+		serverError(w, r, err)
+		return false
+	}
+	if !hasTargetEditAccess {
+		forbidden(w, r, "edit access required on target column")
 		return false
 	}
 
@@ -382,7 +431,7 @@ func (h *TaskHandler) Delete(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	if !h.requireTaskAccess(w, r, workspaceID, columnID, taskID, userID) {
+	if !h.requireTaskEditAccess(w, r, workspaceID, columnID, taskID, userID) {
 		return
 	}
 
@@ -478,7 +527,7 @@ func (h *TaskHandler) Assign(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	if !hasAccess {
-		notFound(w, "member not found in this column")
+		notFound(w, r, "member not found in this column")
 		return
 	}
 

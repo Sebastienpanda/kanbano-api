@@ -34,7 +34,7 @@ func (h *LogHandler) List(w http.ResponseWriter, r *http.Request) {
 	var level *string
 	if raw := query.Get("level"); raw != "" {
 		if raw != "info" && raw != "warning" && raw != "error" {
-			badRequest(w, "invalid level")
+			badRequest(w, r, "invalid level")
 			return
 		}
 		level = &raw

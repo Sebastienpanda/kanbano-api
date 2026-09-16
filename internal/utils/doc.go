@@ -1,3 +1,3 @@
-// Package utils fournit des helpers HTTP partagés : décodage/validation de
-// corps de requête et écriture de réponses JSON standardisées.
+// Package utils provides shared HTTP helpers: request body decoding/validation
+// and standardized JSON response writing.
 package utils

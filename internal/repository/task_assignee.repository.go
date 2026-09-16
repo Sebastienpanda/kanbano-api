@@ -59,6 +59,20 @@ func (r *TaskAssigneeRepository) HasAccess(ctx context.Context, taskID, userID u
 	return exists, err
 }
 
+func (r *TaskAssigneeRepository) HasEditAccess(ctx context.Context, taskID, userID uuid.UUID) (bool, error) {
+	var exists bool
+	row := r.db.QueryRow(ctx, `
+		SELECT EXISTS(
+			SELECT 1 FROM task_assignees
+			WHERE task_id = $1 AND member_id = $2 AND role = 'edit'
+		)
+		`,
+		taskID,
+		userID)
+	err := row.Scan(&exists)
+	return exists, err
+}
+
 func (r *TaskAssigneeRepository) Unassign(ctx context.Context, taskID, memberID uuid.UUID) error {
 	_, err := r.db.Exec(ctx, `
 		DELETE FROM task_assignees

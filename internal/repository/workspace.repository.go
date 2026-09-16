@@ -173,6 +173,18 @@ func (r *WorkspaceRepository) GetByID(ctx context.Context, id, userID uuid.UUID)
 			w.description,
 			w.created_at,
 			w.updated_at,
+			CASE
+				WHEN w.created_by = $2 THEN 'edit'
+				WHEN EXISTS(
+					SELECT 1 FROM organisation_members om
+					WHERE om.organisation_id = w.organisation_id AND om.member_id = $2 AND om.role = 'edit'
+				) THEN 'edit'
+				WHEN EXISTS(
+					SELECT 1 FROM access_grants ag
+					WHERE ag.workspace_id = w.id AND ag.column_id IS NULL AND ag.member_id = $2 AND ag.role = 'edit'
+				) THEN 'edit'
+				ELSE 'view'
+			END,
 			c.id,
 			c.name,
 			c.position,
@@ -180,6 +192,23 @@ func (r *WorkspaceRepository) GetByID(ctx context.Context, id, userID uuid.UUID)
 			c.created_by,
 			c.created_at,
 			c.updated_at,
+			CASE
+				WHEN c.id IS NULL THEN NULL
+				WHEN w.created_by = $2 THEN 'edit'
+				WHEN EXISTS(
+					SELECT 1 FROM organisation_members om
+					WHERE om.organisation_id = w.organisation_id AND om.member_id = $2 AND om.role = 'edit'
+				) THEN 'edit'
+				WHEN EXISTS(
+					SELECT 1 FROM access_grants ag
+					WHERE ag.workspace_id = w.id AND ag.column_id IS NULL AND ag.member_id = $2 AND ag.role = 'edit'
+				) THEN 'edit'
+				WHEN EXISTS(
+					SELECT 1 FROM access_grants ag
+					WHERE ag.column_id = c.id AND ag.member_id = $2 AND ag.role = 'edit'
+				) THEN 'edit'
+				ELSE 'view'
+			END,
 			t.id,
 			t.name,
 			t.description,
@@ -271,11 +300,13 @@ func (a *workspaceDetailAccumulator) scanRow(rows pgx.Rows) error {
 		wsDesc                     *string
 		wsCreatedAt                time.Time
 		wsUpdatedAt                *time.Time
+		wsRole                     string
 		colID, colWsID             *uuid.UUID
 		colCreatedBy               *uuid.UUID
 		colName                    *string
 		colPos                     *int
 		colCreatedAt, colUpdatedAt *time.Time
+		colRole                    *string
 		taskID, taskColID          *uuid.UUID
 		taskName                   *string
 		taskDesc                   *string
@@ -292,8 +323,8 @@ func (a *workspaceDetailAccumulator) scanRow(rows pgx.Rows) error {
 	)
 
 	err := rows.Scan(
-		&wsID, &wsName, &wsDesc, &wsCreatedAt, &wsUpdatedAt,
-		&colID, &colName, &colPos, &colWsID, &colCreatedBy, &colCreatedAt, &colUpdatedAt,
+		&wsID, &wsName, &wsDesc, &wsCreatedAt, &wsUpdatedAt, &wsRole,
+		&colID, &colName, &colPos, &colWsID, &colCreatedBy, &colCreatedAt, &colUpdatedAt, &colRole,
 		&taskID, &taskName, &taskDesc, &taskPos, &taskColID, &taskTagID, &taskStatus, &taskCreatedBy, &taskCreatedAt, &taskUpdAt,
 		&tagID, &tagName, &tagColor,
 		&assigneeID, &assigneeEmail, &assigneeAvatarVersion,
@@ -308,6 +339,7 @@ func (a *workspaceDetailAccumulator) scanRow(rows pgx.Rows) error {
 		a.detail.Description = wsDesc
 		a.detail.CreatedAt = wsCreatedAt
 		a.detail.UpdatedAt = wsUpdatedAt
+		a.detail.Role = wsRole
 		a.initialized = true
 	}
 
@@ -323,6 +355,7 @@ func (a *workspaceDetailAccumulator) scanRow(rows pgx.Rows) error {
 			CreatedBy: derefUUID(colCreatedBy),
 			CreatedAt: derefTime(colCreatedAt),
 			UpdatedAt: colUpdatedAt,
+			Role:      derefStr(colRole),
 		}
 		a.columnsMap[*colID] = &col
 		a.columnOrder = append(a.columnOrder, *colID)

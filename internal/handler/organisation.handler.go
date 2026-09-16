@@ -4,10 +4,12 @@ import (
 	"context"
 	"errors"
 	"kanbano-api/internal/brevo"
+	"kanbano-api/internal/logging"
 	"kanbano-api/internal/models"
 	"kanbano-api/internal/repository"
 	"kanbano-api/internal/storage"
 	"kanbano-api/internal/utils"
+	"log/slog"
 	"net/http"
 	"time"
 
@@ -78,6 +80,7 @@ type memberResponse struct {
 	Name     string            `json:"name"`
 	Avatar   *models.AvatarSet `json:"avatar"`
 	JoinedAt *time.Time        `json:"joined_at"`
+	Role     string            `json:"role"`
 }
 
 // Get godoc
@@ -113,6 +116,7 @@ func (h *OrganisationHandler) response(org models.Organisation) organisationResp
 			Name:     name,
 			Avatar:   avatarSet(h.store, m.ID, m.AvatarVersion),
 			JoinedAt: m.JoinedAt,
+			Role:     m.Role,
 		}
 	}
 	return organisationResponse{ID: org.ID, UserID: org.UserID, Members: members}
@@ -120,8 +124,8 @@ func (h *OrganisationHandler) response(org models.Organisation) organisationResp
 
 // Invite godoc
 // @Summary Invite a member
-// @Description Sends an organisation-level invitation, or a scoped invitation when workspace_id, column_id and task_id are all provided together.
-// @Tags organisation
+// @Description Sends an organization-level invitation, or a scoped invitation when workspace_id, column_id, and task_id are all provided together.
+// @Tags organization
 // @Accept json
 // @Produce json
 // @Param body body inviteBody true "Invitation to create"
@@ -145,7 +149,7 @@ func (h *OrganisationHandler) Invite(w http.ResponseWriter, r *http.Request) {
 	isOrgInvite := body.WorkspaceID == nil && body.ColumnID == nil && body.TaskID == nil
 	isTaskInvite := body.WorkspaceID != nil && body.ColumnID != nil && body.TaskID != nil
 	if !isOrgInvite && !isTaskInvite {
-		badRequest(w, "workspace_id, column_id and task_id must all be provided together")
+		badRequest(w, r, "workspace_id, column_id and task_id must all be provided together")
 		return
 	}
 
@@ -169,7 +173,7 @@ func (h *OrganisationHandler) Invite(w http.ResponseWriter, r *http.Request) {
 	})
 	if err != nil {
 		if errors.Is(err, repository.ErrInvitationAlreadyPending) {
-			conflict(w, "an invitation is already pending for this email")
+			conflict(w, r, "an invitation is already pending for this email")
 			return
 		}
 		serverError(w, r, err)
@@ -178,7 +182,7 @@ func (h *OrganisationHandler) Invite(w http.ResponseWriter, r *http.Request) {
 
 	inviter, err := h.userRepo.GetByID(r.Context(), userID)
 	if err != nil {
-		logRequestError(r, err)
+		logging.Logger.Error("failed to load inviter for invitation email", slog.Any("error", err))
 	} else {
 		h.sendInvitationEmail(r, invitation, inviter)
 	}
@@ -186,9 +190,9 @@ func (h *OrganisationHandler) Invite(w http.ResponseWriter, r *http.Request) {
 	utils.RespondCreated(w, &invitation.ID)
 }
 
-// validateTaskInviteTarget vérifie que la colonne et la tâche ciblées par une
-// invitation existent et sont accessibles à l'invitant. Écrit une réponse
-// d'erreur et retourne false si l'une des vérifications échoue.
+// validateTaskInviteTarget checks that the column and task targeted by an
+// invitation exist and are accessible to the inviter. Writes an error
+// response and returns false if either check fails.
 func (h *OrganisationHandler) validateTaskInviteTarget(w http.ResponseWriter, r *http.Request, userID uuid.UUID, body inviteBody) bool {
 	colExists, err := h.columnRepo.Exists(r.Context(), *body.ColumnID, *body.WorkspaceID)
 	if err != nil {
@@ -196,7 +200,7 @@ func (h *OrganisationHandler) validateTaskInviteTarget(w http.ResponseWriter, r 
 		return false
 	}
 	if !colExists {
-		notFound(w, "column not found")
+		notFound(w, r, "column not found")
 		return false
 	}
 
@@ -206,7 +210,7 @@ func (h *OrganisationHandler) validateTaskInviteTarget(w http.ResponseWriter, r 
 		return false
 	}
 	if !hasColumnAccess {
-		notFound(w, "column not found")
+		notFound(w, r, "column not found")
 		return false
 	}
 
@@ -216,14 +220,14 @@ func (h *OrganisationHandler) validateTaskInviteTarget(w http.ResponseWriter, r 
 		return false
 	}
 	if !taskExists {
-		notFound(w, "task not found")
+		notFound(w, r, "task not found")
 		return false
 	}
 
 	return true
 }
 
-func (h *OrganisationHandler) sendInvitationEmail(r *http.Request, invitation models.OrganisationInvitation, inviter models.User) {
+func (h *OrganisationHandler) sendInvitationEmail(_ *http.Request, invitation models.OrganisationInvitation, inviter models.User) {
 	if h.mailer == nil || h.invitationTplID == 0 {
 		return
 	}
@@ -244,7 +248,7 @@ func (h *OrganisationHandler) sendInvitationEmail(r *http.Request, invitation mo
 		ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 		defer cancel()
 		if err := h.mailer.SendTemplateEmail(ctx, invitation.Email, h.invitationTplID, params); err != nil {
-			logRequestError(r, err)
+			logging.Logger.Error("failed to send invitation email", slog.Any("error", err))
 		}
 	})
 }

@@ -1,3 +1,3 @@
-// Package repository regroupe l'accès aux données via pgx : toutes les requêtes
-// SQL du projet vivent ici, jamais dans les handlers.
+// Package repository groups all data access via pgx: every SQL query in the
+// project lives here, never in the handlers.
 package repository

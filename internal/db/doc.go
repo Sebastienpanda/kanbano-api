@@ -1,2 +1,2 @@
-// Package db gère la connexion au pool PostgreSQL (pgx) vers NeonDB.
+// Package db manages the PostgreSQL (pgx) connection pool to NeonDB.
 package db

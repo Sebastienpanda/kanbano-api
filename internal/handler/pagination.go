@@ -17,7 +17,7 @@ func parsePagination(w http.ResponseWriter, r *http.Request) (limit, offset int,
 	if raw := query.Get("limit"); raw != "" {
 		parsed, err := strconv.Atoi(raw)
 		if err != nil || parsed <= 0 {
-			badRequest(w, "invalid limit")
+			badRequest(w, r, "invalid limit")
 			return 0, 0, false
 		}
 		limit = parsed
@@ -30,7 +30,7 @@ func parsePagination(w http.ResponseWriter, r *http.Request) (limit, offset int,
 	if raw := query.Get("offset"); raw != "" {
 		parsed, err := strconv.Atoi(raw)
 		if err != nil || parsed < 0 {
-			badRequest(w, "invalid offset")
+			badRequest(w, r, "invalid offset")
 			return 0, 0, false
 		}
 		offset = parsed

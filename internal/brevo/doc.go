@@ -1,2 +1,2 @@
-// Package brevo fournit un client pour l'API transactionnelle Brevo (envoi d'emails).
+// Package brevo provides a client for the Brevo transactional email API.
 package brevo
