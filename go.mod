@@ -2,8 +2,6 @@ module kanbano-api
 
 go 1.26.3
 
-toolchain go1.26.6
-
 require (
 	github.com/MicahParks/keyfunc/v3 v3.8.2
 	github.com/aws/aws-sdk-go-v2 v1.47.0
