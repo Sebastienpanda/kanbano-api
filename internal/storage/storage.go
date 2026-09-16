@@ -80,7 +80,7 @@ func (c *Client) Put(ctx context.Context, key string, data []byte, contentType s
 		CacheControl: aws.String("public, max-age=31536000, immutable"),
 	})
 	if err != nil {
-		return fmt.Errorf("put %s: %w", key, err)
+		return fmt.Errorf("put %q: %w", key, err)
 	}
 	return nil
 }
@@ -93,7 +93,7 @@ func (c *Client) RemovePrefix(ctx context.Context, prefix string) error {
 	for pager.HasMorePages() {
 		page, err := pager.NextPage(ctx)
 		if err != nil {
-			return fmt.Errorf("list %s: %w", prefix, err)
+			return fmt.Errorf("list %q: %w", prefix, err)
 		}
 		if len(page.Contents) == 0 {
 			continue
@@ -109,10 +109,10 @@ func (c *Client) RemovePrefix(ctx context.Context, prefix string) error {
 			Delete: &types.Delete{Objects: ids, Quiet: aws.Bool(true)},
 		})
 		if err != nil {
-			return fmt.Errorf("remove %s: %w", prefix, err)
+			return fmt.Errorf("remove %q: %w", prefix, err)
 		}
 		if len(out.Errors) > 0 {
-			return fmt.Errorf("remove %s: %s", aws.ToString(out.Errors[0].Key), aws.ToString(out.Errors[0].Message))
+			return fmt.Errorf("remove %q: %s", aws.ToString(out.Errors[0].Key), aws.ToString(out.Errors[0].Message))
 		}
 	}
 	return nil

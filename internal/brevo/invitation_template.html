@@ -1,0 +1,68 @@
+<!doctype html>
+<html lang="fr">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Invitation Kanbano</title>
+</head>
+<body style="margin:0; padding:0; background-color:#f4f5f7; font-family:Arial, Helvetica, sans-serif;">
+  <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="background-color:#f4f5f7; padding:32px 0;">
+    <tr>
+      <td align="center">
+        <table role="presentation" width="480" cellpadding="0" cellspacing="0" style="background-color:#ffffff; border-radius:8px; overflow:hidden; max-width:480px; width:100%;">
+
+          <!-- Header -->
+          <tr>
+            <td style="background-color:#4f46e5; padding:24px 32px;">
+              <span style="color:#ffffff; font-size:20px; font-weight:bold;">Kanbano</span>
+            </td>
+          </tr>
+
+          <!-- Body -->
+          <tr>
+            <td style="padding:32px;">
+              <h1 style="margin:0 0 16px; font-size:20px; color:#111827;">Vous avez été invité(e) !</h1>
+              <p style="margin:0 0 16px; font-size:15px; line-height:1.5; color:#374151;">
+                <strong>{{ params.INVITER_NAME }}</strong> ({{ params.INVITER_EMAIL }}) vous invite à rejoindre son organisation sur Kanbano.
+              </p>
+              <p style="margin:0 0 24px; font-size:15px; line-height:1.5; color:#374151;">
+                Vous pourrez accéder à ses workspaces et collaborer avec son équipe.
+              </p>
+
+              <!-- Buttons -->
+              <table role="presentation" cellpadding="0" cellspacing="0" style="margin:0 auto;">
+                <tr>
+                  <td style="padding:0 8px;">
+                    <a href="{{ params.ACCEPT_URL }}" target="_blank"
+                       style="display:inline-block; background-color:#4f46e5; color:#ffffff; text-decoration:none; font-size:15px; font-weight:bold; padding:12px 24px; border-radius:6px;">
+                      Accepter
+                    </a>
+                  </td>
+                  <td style="padding:0 8px;">
+                    <a href="{{ params.DECLINE_URL }}" target="_blank"
+                       style="display:inline-block; background-color:#f3f4f6; color:#374151; text-decoration:none; font-size:15px; font-weight:bold; padding:12px 24px; border-radius:6px; border:1px solid #d1d5db;">
+                      Refuser
+                    </a>
+                  </td>
+                </tr>
+              </table>
+
+              <p style="margin:24px 0 0; font-size:13px; line-height:1.5; color:#9ca3af;">
+                Si vous ne connaissez pas {{ params.INVITER_NAME }} ou que vous ne vous attendiez pas à cet email, vous pouvez l'ignorer sans risque.
+              </p>
+            </td>
+          </tr>
+
+          <!-- Footer -->
+          <tr>
+            <td style="padding:16px 32px; background-color:#f9fafb; text-align:center;">
+              <span style="font-size:12px; color:#9ca3af;">Kanbano</span>
+            </td>
+          </tr>
+
+        </table>
+      </td>
+    </tr>
+  </table>
+</body>
+</html>

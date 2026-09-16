@@ -2,7 +2,8 @@ package ws
 
 import (
 	"encoding/json"
-	"log"
+	"kanbano-api/internal/logging"
+	"log/slog"
 	"net/http"
 	"time"
 
@@ -50,7 +51,7 @@ type Client struct {
 func ServeWS(hub *Hub, userID uuid.UUID, w http.ResponseWriter, r *http.Request) {
 	conn, err := upgrader.Upgrade(w, r, nil)
 	if err != nil {
-		log.Printf("websocket upgrade failed: %v", err)
+		logging.Logger.Error("websocket upgrade failed", slog.Any("error", err))
 		return
 	}
 
@@ -64,7 +65,7 @@ func ServeWS(hub *Hub, userID uuid.UUID, w http.ResponseWriter, r *http.Request)
 func (c *Client) readPump() {
 	defer func() {
 		c.hub.unregister(c.userID, c)
-		c.conn.Close()
+		_ = c.conn.Close()
 	}()
 
 	c.conn.SetReadLimit(512)
@@ -85,7 +86,7 @@ func (c *Client) writePump() {
 	ticker := time.NewTicker(pingPeriod)
 	defer func() {
 		ticker.Stop()
-		c.conn.Close()
+		_ = c.conn.Close()
 	}()
 
 	for {

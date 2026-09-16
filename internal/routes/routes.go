@@ -1,12 +1,14 @@
 package routes
 
 import (
+	"kanbano-api/internal/brevo"
 	"kanbano-api/internal/handler"
 	"kanbano-api/internal/middleware"
 	"kanbano-api/internal/repository"
 	"kanbano-api/internal/storage"
 	"kanbano-api/internal/ws"
 	"os"
+	"strconv"
 
 	"github.com/go-chi/chi/v5"
 	"github.com/jackc/pgx/v5/pgxpool"
@@ -19,6 +21,8 @@ type repositories struct {
 	tag          *repository.TagRepository
 	user         *repository.UserRepository
 	organisation *repository.OrganisationRepository
+	accessGrant  *repository.AccessGrantRepository
+	taskAssignee *repository.TaskAssigneeRepository
 	log          *repository.LogRepository
 }
 
@@ -30,6 +34,8 @@ func newRepositories(pool *pgxpool.Pool) repositories {
 		tag:          repository.NewTagRepository(pool),
 		user:         repository.NewUserRepository(pool),
 		organisation: repository.NewOrganisationRepository(pool),
+		accessGrant:  repository.NewAccessGrantRepository(pool),
+		taskAssignee: repository.NewTaskAssigneeRepository(pool),
 		log:          repository.NewLogRepository(pool),
 	}
 }
@@ -47,41 +53,66 @@ type handlers struct {
 }
 
 func newHandlers(repos repositories, store *storage.Client, hub *ws.Hub) handlers {
+	invitationTplID, _ := strconv.Atoi(os.Getenv("BREVO_INVITATION_TEMPLATE_ID"))
+	mailer := brevo.NewClient(os.Getenv("BREVO_API_KEY"))
+
 	return handlers{
-		workspace:    handler.NewWorkspaceHandler(repos.workspace, hub),
-		column:       handler.NewColumnHandler(repos.column, repos.workspace, hub),
-		task:         handler.NewTaskHandler(repos.task, repos.workspace, repos.column, repos.tag, hub),
-		tag:          handler.NewTagHandler(repos.tag),
-		user:         handler.NewUserHandler(repos.user, store, hub),
-		organisation: handler.NewOrganisationHandler(repos.organisation, store),
-		ws:           handler.NewWSHandler(hub),
-		brevo:        handler.NewBrevoHandler(os.Getenv("BREVO_WEBHOOK_SECRET"), os.Getenv("DISCORD_WEBHOOK_URL")),
-		log:          handler.NewLogHandler(repos.log),
+		workspace: handler.NewWorkspaceHandler(repos.workspace, store, hub),
+		column:    handler.NewColumnHandler(repos.column, repos.workspace, repos.accessGrant, hub),
+		task: handler.NewTaskHandler(handler.TaskHandlerDeps{
+			Repo:          repos.task,
+			WorkspaceRepo: repos.workspace,
+			ColumnRepo:    repos.column,
+			TagRepo:       repos.tag,
+			AccessGrant:   repos.accessGrant,
+			TaskAssignee:  repos.taskAssignee,
+			Store:         store,
+			Hub:           hub,
+		}),
+		tag:  handler.NewTagHandler(repos.tag),
+		user: handler.NewUserHandler(repos.user, store, hub),
+		organisation: handler.NewOrganisationHandler(handler.OrganisationHandlerConfig{
+			Repo:            repos.organisation,
+			UserRepo:        repos.user,
+			WorkspaceRepo:   repos.workspace,
+			ColumnRepo:      repos.column,
+			TaskRepo:        repos.task,
+			AccessGrant:     repos.accessGrant,
+			Store:           store,
+			Mailer:          mailer,
+			InvitationTplID: invitationTplID,
+			FrontendBaseURL: os.Getenv("FRONTEND_URL"),
+		}),
+		ws:    handler.NewWSHandler(hub),
+		brevo: handler.NewBrevoHandler(os.Getenv("BREVO_WEBHOOK_SECRET"), os.Getenv("DISCORD_WEBHOOK_URL")),
+		log:   handler.NewLogHandler(repos.log),
 	}
 }
 
 func RegisterRoutes(r *chi.Mux, pool *pgxpool.Pool, store *storage.Client) {
 	hub := ws.NewHub()
 	repos := newRepositories(pool)
-	handler.InitLogRepository(repos.log)
 	h := newHandlers(repos, store, hub)
 
 	r.Route("/api/v1", func(r chi.Router) {
-		r.Use(middleware.AuthRequired)
+		r.Get("/ws", h.ws.Serve)
+		SwaggerRoutes(r)
 
-		Workspaces(r, Handlers{
-			Workspace: h.workspace,
-			Column:    h.column,
-			Task:      h.task,
+		r.Group(func(r chi.Router) {
+			r.Use(middleware.AuthRequired)
+
+			Workspaces(r, Handlers{
+				Workspace:    h.workspace,
+				Column:       h.column,
+				Task:         h.task,
+				Organisation: h.organisation,
+			})
+			TagsRoutes(r, h.tag)
+			UsersRoutes(r, h.user)
+			OrganisationRoutes(r, h.organisation)
+			LogRoutes(r, h.log)
 		})
-		TagsRoutes(r, h.tag)
-		UsersRoutes(r, h.user)
-		OrganisationRoutes(r, h.organisation)
-		LogRoutes(r, h.log)
 	})
-
-	// /ws s'authentifie lui-même via Sec-WebSocket-Protocol (pas de header Authorization possible côté navigateur)
-	r.Get("/api/v1/ws", h.ws.Serve)
 
 	BrevoRoutes(r, h.brevo)
 }

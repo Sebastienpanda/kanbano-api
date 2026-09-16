@@ -1,15 +1,15 @@
 package handler
 
 import (
-	"log"
-	"net/http"
-
+	"kanbano-api/internal/logging"
 	"kanbano-api/internal/media"
 	"kanbano-api/internal/models"
 	"kanbano-api/internal/repository"
 	"kanbano-api/internal/storage"
 	"kanbano-api/internal/utils"
 	"kanbano-api/internal/ws"
+	"log/slog"
+	"net/http"
 
 	"github.com/google/uuid"
 )
@@ -26,7 +26,6 @@ type updateMeBody struct {
 	Name string `json:"name" validate:"required,min=1,max=100"`
 }
 
-// meResponse is the wire shape for /me: the user, plus the avatar URLs when set.
 type meResponse struct {
 	models.User
 	Avatar *models.AvatarSet `json:"avatar"`
@@ -36,6 +35,16 @@ func NewUserHandler(repo *repository.UserRepository, store *storage.Client, hub 
 	return &UserHandler{repo: repo, store: store, hub: hub}
 }
 
+// Me godoc
+// @Summary Get the current user
+// @Tags user
+// @Produce json
+// @Success 200 {object} meResponse
+// @Failure 401 {object} utils.ErrorResponse
+// @Failure 404 {object} utils.ErrorResponse
+// @Failure 500 {object} utils.ErrorResponse
+// @Security BearerAuth
+// @Router /me [get]
 func (h *UserHandler) Me(w http.ResponseWriter, r *http.Request) {
 	userID := userIDFromContext(r)
 
@@ -47,6 +56,20 @@ func (h *UserHandler) Me(w http.ResponseWriter, r *http.Request) {
 	utils.RespondJSON(w, http.StatusOK, h.response(user))
 }
 
+// UpdateMe godoc
+// @Summary Update the current user
+// @Tags user
+// @Accept json
+// @Produce json
+// @Param body body updateMeBody true "Fields to update"
+// @Success 200 {object} utils.UpdateResponse
+// @Failure 400 {object} utils.ErrorResponse
+// @Failure 401 {object} utils.ErrorResponse
+// @Failure 404 {object} utils.ErrorResponse
+// @Failure 422 {object} map[string]any
+// @Failure 500 {object} utils.ErrorResponse
+// @Security BearerAuth
+// @Router /me [patch]
 func (h *UserHandler) UpdateMe(w http.ResponseWriter, r *http.Request) {
 	userID := userIDFromContext(r)
 
@@ -64,8 +87,21 @@ func (h *UserHandler) UpdateMe(w http.ResponseWriter, r *http.Request) {
 	utils.RespondUpdated(w)
 }
 
-// UploadAvatar accepts a multipart "file" field, generates every avatar
-// derivative, stores them in object storage and points the user at the new version.
+// UploadAvatar godoc
+// @Summary Upload the current user's avatar
+// @Description Multipart upload, form field "file" (max 5 MiB). Generates AVIF/WebP/PNG derivatives.
+// @Tags user
+// @Accept multipart/form-data
+// @Produce json
+// @Param file formData file true "Avatar image"
+// @Success 200 {object} utils.UpdateResponse
+// @Failure 400 {object} utils.ErrorResponse
+// @Failure 401 {object} utils.ErrorResponse
+// @Failure 404 {object} utils.ErrorResponse
+// @Failure 500 {object} utils.ErrorResponse
+// @Failure 503 {object} utils.ErrorResponse
+// @Security BearerAuth
+// @Router /me/avatar [put]
 func (h *UserHandler) UploadAvatar(w http.ResponseWriter, r *http.Request) {
 	if h.store == nil {
 		utils.RespondError(w, http.StatusServiceUnavailable, "avatar storage unavailable")
@@ -82,14 +118,14 @@ func (h *UserHandler) UploadAvatar(w http.ResponseWriter, r *http.Request) {
 	r.Body = http.MaxBytesReader(w, r.Body, maxAvatarUpload)
 	file, _, err := r.FormFile("file")
 	if err != nil {
-		badRequest(w, "missing file")
+		badRequest(w, r, "missing file")
 		return
 	}
-	defer file.Close()
+	defer func() { _ = file.Close() }()
 
 	derivatives, err := media.AvatarDerivatives(file)
 	if err != nil {
-		badRequest(w, "invalid image")
+		badRequest(w, r, "invalid image")
 		return
 	}
 
@@ -116,7 +152,7 @@ func (h *UserHandler) UploadAvatar(w http.ResponseWriter, r *http.Request) {
 
 	if old := current.AvatarVersion; old != nil && *old != "" && *old != version {
 		if err := h.store.RemovePrefix(r.Context(), media.AvatarVersionPrefix(userID, *old)); err != nil {
-			log.Printf("avatar: purge old version %s: %v", *old, err)
+			logging.Logger.Error("avatar: purge old version failed", slog.String("version", *old), slog.Any("error", err))
 		}
 	}
 
@@ -124,8 +160,16 @@ func (h *UserHandler) UploadAvatar(w http.ResponseWriter, r *http.Request) {
 	utils.RespondUpdated(w)
 }
 
-// DeleteAvatar removes every stored avatar object for the user and clears the
-// pointer.
+// DeleteAvatar godoc
+// @Summary Delete the current user's avatar
+// @Tags user
+// @Success 204 "No Content"
+// @Failure 401 {object} utils.ErrorResponse
+// @Failure 404 {object} utils.ErrorResponse
+// @Failure 500 {object} utils.ErrorResponse
+// @Failure 503 {object} utils.ErrorResponse
+// @Security BearerAuth
+// @Router /me/avatar [delete]
 func (h *UserHandler) DeleteAvatar(w http.ResponseWriter, r *http.Request) {
 	if h.store == nil {
 		utils.RespondError(w, http.StatusServiceUnavailable, "avatar storage unavailable")

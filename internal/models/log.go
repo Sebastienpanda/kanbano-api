@@ -14,6 +14,6 @@ type Log struct {
 	Source    string          `json:"source"`
 	UserID    *uuid.UUID      `json:"userId"`
 	RequestID *uuid.UUID      `json:"requestId"`
-	Metadata  json.RawMessage `json:"metadata"`
+	Metadata  json.RawMessage `json:"metadata" swaggertype:"object"`
 	CreatedAt time.Time       `json:"createdAt"`
 }

@@ -2,14 +2,19 @@ package utils
 
 import (
 	"errors"
-	"fmt"
 	"reflect"
 	"strings"
 
+	"github.com/go-playground/locales/fr"
+	ut "github.com/go-playground/universal-translator"
 	"github.com/go-playground/validator/v10"
+	fr_translations "github.com/go-playground/validator/v10/translations/fr"
 )
 
-var validate = newValidator()
+var (
+	validate = newValidator()
+	trans    ut.Translator
+)
 
 func newValidator() *validator.Validate {
 	v := validator.New(validator.WithRequiredStructEnabled())
@@ -20,34 +25,15 @@ func newValidator() *validator.Validate {
 		}
 		return name
 	})
-	return v
-}
 
-func validationMessage(e validator.FieldError) string {
-	switch e.Tag() {
-	case "required":
-		return "ce champ est requis"
-	case "min":
-		return fmt.Sprintf("doit faire au moins %s caractères", e.Param())
-	case "max":
-		return fmt.Sprintf("doit faire au plus %s caractères", e.Param())
-	case "len":
-		return fmt.Sprintf("doit faire exactement %s caractères", e.Param())
-	case "email":
-		return "doit être une adresse email valide"
-	case "url":
-		return "doit être une URL valide"
-	case "uuid":
-		return "doit être un UUID valide"
-	case "oneof":
-		return fmt.Sprintf("doit être l'une des valeurs: %s", e.Param())
-	case "alphanum":
-		return "ne doit contenir que des lettres et des chiffres"
-	case "lowercase":
-		return "doit être en minuscules"
-	default:
-		return "valeur invalide"
+	frLocale := fr.New()
+	uni := ut.New(frLocale, frLocale)
+	trans, _ = uni.GetTranslator("fr")
+	if err := fr_translations.RegisterDefaultTranslations(v, trans); err != nil {
+		panic("could not register fr validator translations: " + err.Error())
 	}
+
+	return v
 }
 
 func validationErrors(err error) map[string]string {
@@ -57,7 +43,7 @@ func validationErrors(err error) map[string]string {
 	}
 	out := make(map[string]string, len(verrs))
 	for _, e := range verrs {
-		out[e.Field()] = validationMessage(e)
+		out[e.Field()] = e.Translate(trans)
 	}
 	return out
 }

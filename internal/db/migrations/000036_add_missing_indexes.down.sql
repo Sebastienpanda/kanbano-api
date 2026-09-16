@@ -1,0 +1,11 @@
+DROP INDEX organisation_invitations_task_id_idx;
+DROP INDEX organisation_invitations_workspace_id_idx;
+
+DROP INDEX organisation_members_member_id_idx;
+DROP INDEX organisation_members_organisation_id_idx;
+
+DROP INDEX tasks_column_id_idx;
+DROP INDEX columns_workspace_id_idx;
+
+DROP INDEX workspaces_organisation_id_idx;
+DROP INDEX workspaces_created_by_idx;

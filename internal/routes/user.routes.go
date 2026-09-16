@@ -8,7 +8,6 @@ import (
 
 func UsersRoutes(r chi.Router, uh *handler.UserHandler) {
 	r.Route("/me", func(r chi.Router) {
-
 		r.Get("/", uh.Me)
 		r.Patch("/", uh.UpdateMe)
 		r.Put("/avatar", uh.UploadAvatar)

@@ -17,14 +17,17 @@ func NewTagRepository(db *pgxpool.Pool) *TagRepository {
 	return &TagRepository{db: db}
 }
 
-func (r *TagRepository) List(ctx context.Context, userID uuid.UUID) ([]models.Tag, error) {
+func (r *TagRepository) List(ctx context.Context, userID uuid.UUID, limit, offset int) ([]models.Tag, error) {
 	rows, err := r.db.Query(ctx, `
 		SELECT id, name, color, created_by, updated_by, deleted_by, created_at, updated_at
 		FROM tags
 		WHERE created_by = $1
 		ORDER BY name
+		LIMIT $2 OFFSET $3
 		`,
-		userID)
+		userID,
+		limit,
+		offset)
 	if err != nil {
 		return nil, err
 	}
@@ -42,7 +45,7 @@ func (r *TagRepository) Create(ctx context.Context, name string, color *string, 
 		userID)
 }
 
-func (r *TagRepository) Update(ctx context.Context, id uuid.UUID, userID uuid.UUID, name *string, color *string) (models.Tag, error) {
+func (r *TagRepository) Update(ctx context.Context, id, userID uuid.UUID, name, color *string) (models.Tag, error) {
 	return queryStruct[models.Tag](ctx, r.db, `
 		UPDATE tags
 		SET name       = COALESCE($1, name),
@@ -81,7 +84,7 @@ func (r *TagRepository) GetByID(ctx context.Context, id uuid.UUID) (models.TagNa
 		id)
 }
 
-func (r *TagRepository) Exists(ctx context.Context, id uuid.UUID, userID uuid.UUID) (bool, error) {
+func (r *TagRepository) Exists(ctx context.Context, id, userID uuid.UUID) (bool, error) {
 	var exists bool
 	row := r.db.QueryRow(ctx, `
 		SELECT EXISTS(

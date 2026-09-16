@@ -1,11 +1,10 @@
 package handler
 
 import (
-	"net/http"
-	"strings"
-
 	"kanbano-api/internal/middleware"
 	"kanbano-api/internal/ws"
+	"net/http"
+	"strings"
 
 	"github.com/google/uuid"
 )
@@ -26,6 +25,13 @@ func bearerToken(r *http.Request) string {
 	return strings.TrimSpace(parts[1])
 }
 
+// Serve godoc
+// @Summary WebSocket connection for real-time updates
+// @Description Upgrades to a WebSocket connection. The JWT is passed via the Sec-WebSocket-Protocol header as "bearer, <token>" (not a normal Authorization header, so no BearerAuth security scheme applies here).
+// @Tags ws
+// @Success 101 "Switching Protocols"
+// @Failure 401 {object} string "missing or invalid token"
+// @Router /ws [get]
 func (h *WSHandler) Serve(w http.ResponseWriter, r *http.Request) {
 	token := bearerToken(r)
 	if token == "" {

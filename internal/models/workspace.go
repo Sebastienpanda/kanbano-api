@@ -31,34 +31,41 @@ type WorkspaceSearchResult struct {
 }
 
 type WorkspaceDetail struct {
-	ID          uuid.UUID         `json:"id"`
-	Name        string            `json:"name"`
-	Description *string           `json:"description"`
-	CreatedAt   time.Time         `json:"created_at"`
-	UpdatedAt   *time.Time        `json:"updated_at"`
-	Columns     []ColumnWithTasks `json:"columns"`
-}
-
-type ColumnWithTasks struct {
-	ID        uuid.UUID     `json:"id"`
-	Name      string        `json:"name"`
-	Position  int           `json:"position"`
-	CreatedBy uuid.UUID     `json:"created_by"`
-	CreatedAt time.Time     `json:"created_at"`
-	UpdatedAt *time.Time    `json:"updated_at"`
-	Tasks     []TaskWithTag `json:"tasks"`
-}
-
-type TaskWithTag struct {
 	ID          uuid.UUID  `json:"id"`
 	Name        string     `json:"name"`
 	Description *string    `json:"description"`
-	Position    int        `json:"position"`
-	ColumnID    uuid.UUID  `json:"column_id"`
-	TagID       *uuid.UUID `json:"tag_id"`
-	Status      *string    `json:"status"`
-	CreatedBy   uuid.UUID  `json:"created_by"`
 	CreatedAt   time.Time  `json:"created_at"`
 	UpdatedAt   *time.Time `json:"updated_at"`
-	Tag         *TagName   `json:"tag"`
+	// Role is the current user's effective role on the workspace as a whole
+	// ('edit' or 'view'), i.e. whether they can create columns.
+	Role    string            `json:"role"`
+	Columns []ColumnWithTasks `json:"columns"`
+}
+
+type ColumnWithTasks struct {
+	ID        uuid.UUID  `json:"id"`
+	Name      string     `json:"name"`
+	Position  int        `json:"position"`
+	CreatedBy uuid.UUID  `json:"created_by"`
+	CreatedAt time.Time  `json:"created_at"`
+	UpdatedAt *time.Time `json:"updated_at"`
+	// Role is the current user's effective role on this column ('edit' or
+	// 'view'), i.e. whether they can create/edit/move tasks in it.
+	Role  string        `json:"role"`
+	Tasks []TaskWithTag `json:"tasks"`
+}
+
+type TaskWithTag struct {
+	ID            uuid.UUID          `json:"id"`
+	Name          string             `json:"name"`
+	Description   *string            `json:"description"`
+	Position      int                `json:"position"`
+	ColumnID      uuid.UUID          `json:"column_id"`
+	TagID         *uuid.UUID         `json:"tag_id"`
+	Status        *string            `json:"status"`
+	CreatedBy     uuid.UUID          `json:"created_by"`
+	CreatedAt     time.Time          `json:"created_at"`
+	UpdatedAt     *time.Time         `json:"updated_at"`
+	Tag           *TagName           `json:"tag"`
+	AssignedUsers []TaskAssignedUser `json:"assigned_users"`
 }

@@ -2,11 +2,13 @@ package handler
 
 import (
 	"bytes"
+	"context"
 	"crypto/subtle"
 	"encoding/json"
 	"fmt"
+	"kanbano-api/internal/logging"
 	"kanbano-api/internal/utils"
-	"log"
+	"log/slog"
 	"net/http"
 	"strings"
 	"time"
@@ -31,22 +33,38 @@ type brevoEvent struct {
 	Date    string `json:"date"`
 }
 
+// Webhook godoc
+// @Summary Brevo transactional email webhook
+// @Description Receives Brevo email event callbacks (bounce, spam, etc.), authenticated via a "token" query param, and relays failures to Discord if configured.
+// @Tags brevo
+// @Accept json
+// @Produce json
+// @Param token query string true "Shared webhook secret"
+// @Param body body brevoEvent true "Brevo event payload"
+// @Success 200 {object} map[string]string
+// @Failure 400 {object} utils.ErrorResponse
+// @Failure 401 {object} utils.ErrorResponse
+// @Failure 415 {object} utils.ErrorResponse
+// @Router /../webhooks/brevo [post]
 func (h *BrevoHandler) Webhook(w http.ResponseWriter, r *http.Request) {
 	if h.webhookSecret == "" || !secretMatches(r.URL.Query().Get("token"), h.webhookSecret) {
 		utils.RespondError(w, http.StatusUnauthorized, "unauthorized")
 		return
 	}
 
-	event, err := utils.DecodeJsonBody[brevoEvent]("BrevoHandler.Webhook", w, r)
+	event, err := utils.DecodeJSONBody[brevoEvent]("BrevoHandler.Webhook", w, r)
 	if err != nil {
 		return
 	}
 
-	log.Printf("brevo webhook received: event=%s email=%s", sanitizeLogValue(event.Event), maskEmail(event.Email))
+	logging.Logger.Info("brevo webhook received",
+		slog.String("event", sanitizeLogValue(event.Event)),
+		slog.String("email", maskEmail(event.Email)),
+	)
 
 	if h.discordURL != "" {
-		if err := h.notifyDiscord(*event); err != nil {
-			log.Printf("failed to notify discord for brevo event: %v", err)
+		if err := h.notifyDiscord(r.Context(), *event); err != nil {
+			logging.Logger.Error("failed to notify discord for brevo event", slog.Any("error", err))
 		}
 	}
 
@@ -84,7 +102,7 @@ type discordEmbed struct {
 	Timestamp string `json:"timestamp,omitempty"`
 }
 
-func (h *BrevoHandler) notifyDiscord(event brevoEvent) error {
+func (h *BrevoHandler) notifyDiscord(ctx context.Context, event brevoEvent) error {
 	eventName := sanitizeLogValue(event.Event)
 
 	color := discordColorNeutral
@@ -121,11 +139,17 @@ func (h *BrevoHandler) notifyDiscord(event brevoEvent) error {
 		return err
 	}
 
-	resp, err := discordClient.Post(h.discordURL, "application/json", bytes.NewReader(body))
+	req, err := http.NewRequestWithContext(ctx, http.MethodPost, h.discordURL, bytes.NewReader(body))
 	if err != nil {
 		return err
 	}
-	defer resp.Body.Close()
+	req.Header.Set("Content-Type", "application/json")
+
+	resp, err := discordClient.Do(req)
+	if err != nil {
+		return err
+	}
+	defer func() { _ = resp.Body.Close() }()
 
 	if resp.StatusCode >= 300 {
 		return fmt.Errorf("discord webhook returned status %d", resp.StatusCode)

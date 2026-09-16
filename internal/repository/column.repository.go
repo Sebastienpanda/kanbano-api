@@ -17,7 +17,7 @@ func NewColumnRepository(db *pgxpool.Pool) *ColumnRepository {
 	return &ColumnRepository{db: db}
 }
 
-func (r *ColumnRepository) Create(ctx context.Context, name string, workspaceID uuid.UUID, createdBy uuid.UUID) (models.Column, error) {
+func (r *ColumnRepository) Create(ctx context.Context, name string, workspaceID, createdBy uuid.UUID) (models.Column, error) {
 	return queryStruct[models.Column](ctx, r.db, `
 		INSERT INTO columns (name, workspace_id, position, created_by)
 		VALUES ($1, $2, (SELECT COALESCE(MAX(position) + 1, 0) FROM columns WHERE workspace_id = $2), $3)
@@ -42,7 +42,7 @@ func (r *ColumnRepository) ListNames(ctx context.Context, workspaceID uuid.UUID)
 	return pgx.CollectRows(rows, pgx.RowToStructByName[models.ColumnName])
 }
 
-func (r *ColumnRepository) Exists(ctx context.Context, id uuid.UUID, workspaceID uuid.UUID) (bool, error) {
+func (r *ColumnRepository) Exists(ctx context.Context, id, workspaceID uuid.UUID) (bool, error) {
 	var exists bool
 	row := r.db.QueryRow(ctx, `
 		SELECT EXISTS(
@@ -59,7 +59,7 @@ func (r *ColumnRepository) Exists(ctx context.Context, id uuid.UUID, workspaceID
 	return exists, err
 }
 
-func (r *ColumnRepository) Update(ctx context.Context, id uuid.UUID, workspaceID uuid.UUID, name *string, actorID uuid.UUID) (models.Column, error) {
+func (r *ColumnRepository) Update(ctx context.Context, id, workspaceID uuid.UUID, name *string, actorID uuid.UUID) (models.Column, error) {
 	return queryStruct[models.Column](ctx, r.db, `
 		UPDATE columns
 		SET name       = COALESCE($1, name),
@@ -76,12 +76,12 @@ func (r *ColumnRepository) Update(ctx context.Context, id uuid.UUID, workspaceID
 		actorID)
 }
 
-func (r *ColumnRepository) Reorder(ctx context.Context, id uuid.UUID, workspaceID uuid.UUID, position int, actorID uuid.UUID) (models.Column, error) {
+func (r *ColumnRepository) Reorder(ctx context.Context, id, workspaceID uuid.UUID, position int, actorID uuid.UUID) (models.Column, error) {
 	tx, err := r.db.Begin(ctx)
 	if err != nil {
 		return models.Column{}, err
 	}
-	defer tx.Rollback(ctx)
+	defer func() { _ = tx.Rollback(ctx) }()
 
 	var oldPosition int
 	row := tx.QueryRow(ctx, `
@@ -161,12 +161,12 @@ func (r *ColumnRepository) Reorder(ctx context.Context, id uuid.UUID, workspaceI
 	return column, nil
 }
 
-func (r *ColumnRepository) SoftDelete(ctx context.Context, id uuid.UUID, workspaceID uuid.UUID, actorID uuid.UUID) (models.Column, error) {
+func (r *ColumnRepository) SoftDelete(ctx context.Context, id, workspaceID, actorID uuid.UUID) (models.Column, error) {
 	tx, err := r.db.Begin(ctx)
 	if err != nil {
 		return models.Column{}, err
 	}
-	defer tx.Rollback(ctx)
+	defer func() { _ = tx.Rollback(ctx) }()
 
 	column, err := queryStruct[models.Column](ctx, tx, `
 		UPDATE columns

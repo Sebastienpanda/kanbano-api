@@ -16,6 +16,9 @@ const UserIDKey contextKey = "user_id"
 
 var jwks keyfunc.Keyfunc
 
+// ErrInvalidToken indicates a JWT token that is missing, malformed, expired, or fails signature validation.
+var ErrInvalidToken = errors.New("invalid token")
+
 func InitJWKS(jwksURL string) error {
 	var err error
 	jwks, err = keyfunc.NewDefault([]string{jwksURL})
@@ -25,17 +28,17 @@ func InitJWKS(jwksURL string) error {
 func ValidateToken(tokenStr string) (string, error) {
 	token, err := jwt.Parse(tokenStr, jwks.Keyfunc, jwt.WithValidMethods([]string{"EdDSA"}))
 	if err != nil || !token.Valid {
-		return "", errors.New("invalid token")
+		return "", ErrInvalidToken
 	}
 
 	claims, ok := token.Claims.(jwt.MapClaims)
 	if !ok {
-		return "", errors.New("invalid token")
+		return "", ErrInvalidToken
 	}
 
 	userID, ok := claims["sub"].(string)
 	if !ok {
-		return "", errors.New("invalid token")
+		return "", ErrInvalidToken
 	}
 
 	return userID, nil
@@ -43,7 +46,6 @@ func ValidateToken(tokenStr string) (string, error) {
 
 func AuthRequired(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-
 		authHeader := r.Header.Get("Authorization")
 		if !strings.HasPrefix(authHeader, "Bearer ") {
 			http.Error(w, "missing token", http.StatusUnauthorized)

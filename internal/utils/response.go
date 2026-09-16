@@ -2,7 +2,8 @@ package utils
 
 import (
 	"encoding/json"
-	"log"
+	"kanbano-api/internal/logging"
+	"log/slog"
 	"net/http"
 
 	"github.com/google/uuid"
@@ -21,7 +22,7 @@ func RespondJSON(w http.ResponseWriter, statusCode int, v any) {
 	enc := json.NewEncoder(w)
 	err := enc.Encode(v)
 	if err != nil {
-		log.Printf("RespondJSON: could not encode response failed: %v", err)
+		logging.Logger.Error("could not encode response", slog.Any("error", err))
 		RespondError(w, http.StatusInternalServerError, "could not write response")
 		return
 	}

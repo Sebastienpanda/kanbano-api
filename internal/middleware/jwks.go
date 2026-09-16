@@ -1,10 +1,15 @@
 package middleware
 
-import "log"
+import (
+	"kanbano-api/internal/logging"
+	"log/slog"
+	"os"
+)
 
 func MustInitJWKS(jwksURL string) {
 	if err := InitJWKS(jwksURL); err != nil {
-		log.Fatalf("failed to initialize JWKS: %v", err)
+		logging.Logger.Error("failed to initialize JWKS", slog.Any("error", err))
+		os.Exit(1)
 	}
-	log.Println("JWKS initialized successfully")
+	logging.Logger.Info("JWKS initialized successfully")
 }
