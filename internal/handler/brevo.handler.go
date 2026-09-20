@@ -52,8 +52,11 @@ func (h *BrevoHandler) Webhook(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	event, err := utils.DecodeJSONBody[brevoEvent]("BrevoHandler.Webhook", w, r)
-	if err != nil {
+	// Brevo's payload carries many fields we don't model (id, message-id, ts...),
+	// so unlike DecodeJSONBody this decoder must tolerate unknown fields.
+	var event brevoEvent
+	if err := json.NewDecoder(http.MaxBytesReader(w, r.Body, 1<<20)).Decode(&event); err != nil {
+		utils.RespondError(w, http.StatusBadRequest, "could not decode body")
 		return
 	}
 
@@ -63,7 +66,7 @@ func (h *BrevoHandler) Webhook(w http.ResponseWriter, r *http.Request) {
 	)
 
 	if h.discordURL != "" {
-		if err := h.notifyDiscord(r.Context(), *event); err != nil {
+		if err := h.notifyDiscord(r.Context(), event); err != nil {
 			logging.Logger.Error("failed to notify discord for brevo event", slog.Any("error", err))
 		}
 	}
