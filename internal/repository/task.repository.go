@@ -34,7 +34,7 @@ func (r *TaskRepository) Exists(ctx context.Context, taskID, columnID uuid.UUID)
 func (r *TaskRepository) Create(ctx context.Context, name string, description *string, columnID uuid.UUID, tagID *uuid.UUID, status *string, createdBy uuid.UUID) (models.Task, error) {
 	return queryStruct[models.Task](ctx, r.db, `
 		INSERT INTO tasks (name, description, column_id, tag_id, status, position, created_by)
-		VALUES ($1, $2, $3, $4, COALESCE($5, 'À faire'), (SELECT COALESCE(MAX(position) + 1, 0) FROM tasks WHERE column_id = $3), $6)
+		VALUES ($1, $2, $3, $4, COALESCE($5::task_status, 'À faire'), (SELECT COALESCE(MAX(position) + 1, 0) FROM tasks WHERE column_id = $3), $6)
 		RETURNING id, name, description, position, column_id, tag_id, status, created_by, updated_by, deleted_by, created_at, updated_at, deleted_at
 		`,
 		name,
@@ -61,7 +61,7 @@ func (r *TaskRepository) Update(ctx context.Context, update TaskUpdate) (models.
 		SET name        = COALESCE($1, name),
 		    description = COALESCE($2, description),
 		    tag_id      = COALESCE($3, tag_id),
-		    status      = COALESCE($4, status),
+		    status      = COALESCE($4::task_status, status),
 		    updated_by  = $7,
 		    updated_at  = NOW()
 		WHERE id = $5 AND column_id = $6 AND deleted_at IS NULL

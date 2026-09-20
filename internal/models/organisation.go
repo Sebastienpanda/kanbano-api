@@ -20,6 +20,24 @@ type OrganisationMember struct {
 	Role          string     `json:"role"`
 }
 
+// MemberProfile is a member's identity plus their role in the organisation
+// and, per workspace of that organisation, their effective role there.
+type MemberProfile struct {
+	ID            uuid.UUID       `json:"id"`
+	Email         string          `json:"email"`
+	Name          *string         `json:"name"`
+	AvatarVersion *string         `json:"-"`
+	Role          string          `json:"role"`
+	Workspaces    []WorkspaceRole `json:"workspaces"`
+}
+
+type WorkspaceRole struct {
+	ID        uuid.UUID `json:"id"`
+	Name      string    `json:"name"`
+	CreatedAt time.Time `json:"created_at"`
+	Role      string    `json:"role"`
+}
+
 type OrganisationInvitation struct {
 	ID             uuid.UUID  `json:"id"`
 	OrganisationID uuid.UUID  `json:"organisation_id"`
@@ -28,8 +46,5 @@ type OrganisationInvitation struct {
 	Status         string     `json:"status"`
 	CreatedAt      time.Time  `json:"created_at"`
 	RespondedAt    *time.Time `json:"responded_at"`
-	WorkspaceID    *uuid.UUID `json:"workspace_id"`
-	ColumnID       *uuid.UUID `json:"column_id"`
-	TaskID         *uuid.UUID `json:"task_id"`
 	Role           *string    `json:"role"`
 }

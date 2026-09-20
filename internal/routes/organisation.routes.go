@@ -9,6 +9,7 @@ import (
 func OrganisationRoutes(r chi.Router, oh *handler.OrganisationHandler) {
 	r.Route("/organisation", func(r chi.Router) {
 		r.Get("/", oh.Get)
+		r.Get("/members/{id}/profile", oh.MemberProfile)
 
 		r.Route("/invitations", func(r chi.Router) {
 			r.Post("/", oh.Invite)

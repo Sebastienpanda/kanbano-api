@@ -19,10 +19,6 @@ import (
 type OrganisationHandler struct {
 	repo            *repository.OrganisationRepository
 	userRepo        *repository.UserRepository
-	workspaceRepo   *repository.WorkspaceRepository
-	columnRepo      *repository.ColumnRepository
-	taskRepo        *repository.TaskRepository
-	accessGrant     *repository.AccessGrantRepository
 	store           *storage.Client
 	mailer          *brevo.Client
 	invitationTplID int
@@ -32,10 +28,6 @@ type OrganisationHandler struct {
 type OrganisationHandlerConfig struct {
 	Repo            *repository.OrganisationRepository
 	UserRepo        *repository.UserRepository
-	WorkspaceRepo   *repository.WorkspaceRepository
-	ColumnRepo      *repository.ColumnRepository
-	TaskRepo        *repository.TaskRepository
-	AccessGrant     *repository.AccessGrantRepository
 	Store           *storage.Client
 	Mailer          *brevo.Client
 	InvitationTplID int
@@ -46,10 +38,6 @@ func NewOrganisationHandler(cfg OrganisationHandlerConfig) *OrganisationHandler 
 	return &OrganisationHandler{
 		repo:            cfg.Repo,
 		userRepo:        cfg.UserRepo,
-		workspaceRepo:   cfg.WorkspaceRepo,
-		columnRepo:      cfg.ColumnRepo,
-		taskRepo:        cfg.TaskRepo,
-		accessGrant:     cfg.AccessGrant,
 		store:           cfg.Store,
 		mailer:          cfg.Mailer,
 		invitationTplID: cfg.InvitationTplID,
@@ -58,11 +46,8 @@ func NewOrganisationHandler(cfg OrganisationHandlerConfig) *OrganisationHandler 
 }
 
 type inviteBody struct {
-	Email       string     `json:"email" validate:"required,email"`
-	Role        *string    `json:"role,omitempty" validate:"omitempty,oneof=view edit"`
-	WorkspaceID *uuid.UUID `json:"workspace_id,omitempty"`
-	ColumnID    *uuid.UUID `json:"column_id,omitempty"`
-	TaskID      *uuid.UUID `json:"task_id,omitempty"`
+	Email string  `json:"email" validate:"required,email"`
+	Role  *string `json:"role,omitempty" validate:"omitempty,oneof=view edit"`
 }
 
 type updateInvitationBody struct {
@@ -122,9 +107,59 @@ func (h *OrganisationHandler) response(org models.Organisation) organisationResp
 	return organisationResponse{ID: org.ID, UserID: org.UserID, Members: members}
 }
 
+type memberProfileResponse struct {
+	ID         uuid.UUID              `json:"id"`
+	Email      string                 `json:"email"`
+	Name       string                 `json:"name"`
+	Avatar     *models.AvatarSet      `json:"avatar"`
+	Role       string                 `json:"role"`
+	Workspaces []models.WorkspaceRole `json:"workspaces"`
+}
+
+// MemberProfile godoc
+// @Summary Get a member's profile within the organisation
+// @Description Returns the member's identity, organisation role, and effective role on every workspace of the organisation. The caller must belong to the same organisation as the target member.
+// @Tags organisation
+// @Produce json
+// @Param id path string true "Member ID (user ID)"
+// @Success 200 {object} memberProfileResponse
+// @Failure 400 {object} utils.ErrorResponse
+// @Failure 401 {object} utils.ErrorResponse
+// @Failure 404 {object} utils.ErrorResponse
+// @Failure 500 {object} utils.ErrorResponse
+// @Security BearerAuth
+// @Router /organisation/members/{id}/profile [get]
+func (h *OrganisationHandler) MemberProfile(w http.ResponseWriter, r *http.Request) {
+	callerID := userIDFromContext(r)
+
+	memberID, ok := parseUUIDParam(w, r, "id")
+	if !ok {
+		return
+	}
+
+	profile, err := h.repo.GetMemberProfile(r.Context(), callerID, memberID)
+	if handleRepoError(w, r, err, "member not found") {
+		return
+	}
+
+	name := "Anonyme"
+	if profile.Name != nil && *profile.Name != "" {
+		name = *profile.Name
+	}
+
+	utils.RespondJSON(w, http.StatusOK, memberProfileResponse{
+		ID:         profile.ID,
+		Email:      profile.Email,
+		Name:       name,
+		Avatar:     avatarSet(h.store, profile.ID, profile.AvatarVersion),
+		Role:       profile.Role,
+		Workspaces: profile.Workspaces,
+	})
+}
+
 // Invite godoc
 // @Summary Invite a member
-// @Description Sends an organization-level invitation, or a scoped invitation when workspace_id, column_id, and task_id are all provided together.
+// @Description Sends an organisation-level invitation by email.
 // @Tags organization
 // @Accept json
 // @Produce json
@@ -146,17 +181,6 @@ func (h *OrganisationHandler) Invite(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	isOrgInvite := body.WorkspaceID == nil && body.ColumnID == nil && body.TaskID == nil
-	isTaskInvite := body.WorkspaceID != nil && body.ColumnID != nil && body.TaskID != nil
-	if !isOrgInvite && !isTaskInvite {
-		badRequest(w, r, "workspace_id, column_id and task_id must all be provided together")
-		return
-	}
-
-	if isTaskInvite && !h.validateTaskInviteTarget(w, r, userID, body) {
-		return
-	}
-
 	org, err := h.repo.GetOrganisationWithMembers(r.Context(), userID)
 	if handleRepoError(w, r, err, "organisation not found") {
 		return
@@ -166,9 +190,6 @@ func (h *OrganisationHandler) Invite(w http.ResponseWriter, r *http.Request) {
 		OrganisationID: org.ID,
 		Email:          body.Email,
 		InvitedBy:      userID,
-		WorkspaceID:    body.WorkspaceID,
-		ColumnID:       body.ColumnID,
-		TaskID:         body.TaskID,
 		Role:           body.Role,
 	})
 	if err != nil {
@@ -188,43 +209,6 @@ func (h *OrganisationHandler) Invite(w http.ResponseWriter, r *http.Request) {
 	}
 
 	utils.RespondCreated(w, &invitation.ID)
-}
-
-// validateTaskInviteTarget checks that the column and task targeted by an
-// invitation exist and are accessible to the inviter. Writes an error
-// response and returns false if either check fails.
-func (h *OrganisationHandler) validateTaskInviteTarget(w http.ResponseWriter, r *http.Request, userID uuid.UUID, body inviteBody) bool {
-	colExists, err := h.columnRepo.Exists(r.Context(), *body.ColumnID, *body.WorkspaceID)
-	if err != nil {
-		serverError(w, r, err)
-		return false
-	}
-	if !colExists {
-		notFound(w, r, "column not found")
-		return false
-	}
-
-	hasColumnAccess, err := h.accessGrant.HasColumnAccess(r.Context(), *body.WorkspaceID, *body.ColumnID, userID)
-	if err != nil {
-		serverError(w, r, err)
-		return false
-	}
-	if !hasColumnAccess {
-		notFound(w, r, "column not found")
-		return false
-	}
-
-	taskExists, err := h.taskRepo.Exists(r.Context(), *body.TaskID, *body.ColumnID)
-	if err != nil {
-		serverError(w, r, err)
-		return false
-	}
-	if !taskExists {
-		notFound(w, r, "task not found")
-		return false
-	}
-
-	return true
 }
 
 func (h *OrganisationHandler) sendInvitationEmail(_ *http.Request, invitation models.OrganisationInvitation, inviter models.User) {

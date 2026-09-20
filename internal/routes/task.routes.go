@@ -9,4 +9,7 @@ func task(r chi.Router, h Handlers) {
 	r.Get("/columns/{columnId}/tasks/{taskId}/assignees", h.Task.Assignees)
 	r.Post("/columns/{columnId}/tasks/{taskId}/assignees", h.Task.Assign)
 	r.Delete("/columns/{columnId}/tasks/{taskId}/assignees/{memberId}", h.Task.Unassign)
+
+	r.Post("/columns/{columnId}/tasks/{taskId}/guests", h.TaskGuest.Invite)
+	r.Get("/columns/{columnId}/tasks/{taskId}/guests", h.TaskGuest.SentInvitations)
 }

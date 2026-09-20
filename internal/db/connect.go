@@ -6,11 +6,21 @@ import (
 	"log/slog"
 	"os"
 
+	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgxpool"
 )
 
 func MustConnectDB() *pgxpool.Pool {
-	pool, err := pgxpool.New(context.Background(), os.Getenv("DATABASE_URL"))
+	config, err := pgxpool.ParseConfig(os.Getenv("DATABASE_URL"))
+	if err != nil {
+		logging.Logger.Error("failed to parse database connection string", slog.Any("error", err))
+		os.Exit(1)
+	}
+	// Neon's pooled endpoint runs PgBouncer in transaction mode, which does not
+	// support server-side prepared statements shared across pooled connections.
+	config.ConnConfig.DefaultQueryExecMode = pgx.QueryExecModeSimpleProtocol
+
+	pool, err := pgxpool.NewWithConfig(context.Background(), config)
 	if err != nil {
 		logging.Logger.Error("failed to create database connection pool", slog.Any("error", err))
 		os.Exit(1)

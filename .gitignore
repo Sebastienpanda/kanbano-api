@@ -2,3 +2,10 @@
 .env.test
 AGENTS.md
 CLAUDE.md
+
+# Tests d'intégration (testcontainers-go) : pas de CI pour les exécuter,
+# on ne les versionne pas.
+internal/testutil/
+internal/repository/*_test.go
+internal/handler/*_test.go
+internal/db/migrations/migrations.go

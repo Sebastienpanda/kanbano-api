@@ -1,19 +1,15 @@
 package models
 
 import (
-	"time"
-
 	"github.com/google/uuid"
 )
 
-type AccessGrant struct {
-	ID          uuid.UUID  `json:"id"`
-	WorkspaceID uuid.UUID  `json:"workspace_id"`
-	ColumnID    *uuid.UUID `json:"column_id"`
-	MemberID    uuid.UUID  `json:"member_id"`
-	Role        string     `json:"role"`
-	GrantedBy   uuid.UUID  `json:"granted_by"`
-	CreatedAt   time.Time  `json:"created_at"`
+// TaskRole is a task's id, column and the resolved effective role
+// ('edit'/'view') of the requesting member on it.
+type TaskRole struct {
+	TaskID   uuid.UUID `json:"task_id"`
+	ColumnID uuid.UUID `json:"column_id"`
+	Role     string    `json:"role"`
 }
 
 type TaskAssignee struct {

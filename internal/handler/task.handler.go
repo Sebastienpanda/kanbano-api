@@ -20,7 +20,7 @@ type TaskHandler struct {
 	workspaceRepo *repository.WorkspaceRepository
 	columnRepo    *repository.ColumnRepository
 	tagRepo       *repository.TagRepository
-	accessGrant   *repository.AccessGrantRepository
+	role          *repository.RoleRepository
 	taskAssignee  *repository.TaskAssigneeRepository
 	store         *storage.Client
 	hub           *ws.Hub
@@ -31,7 +31,7 @@ type TaskHandlerDeps struct {
 	WorkspaceRepo *repository.WorkspaceRepository
 	ColumnRepo    *repository.ColumnRepository
 	TagRepo       *repository.TagRepository
-	AccessGrant   *repository.AccessGrantRepository
+	Role          *repository.RoleRepository
 	TaskAssignee  *repository.TaskAssigneeRepository
 	Store         *storage.Client
 	Hub           *ws.Hub
@@ -83,7 +83,7 @@ func NewTaskHandler(deps TaskHandlerDeps) *TaskHandler {
 		workspaceRepo: deps.WorkspaceRepo,
 		columnRepo:    deps.ColumnRepo,
 		tagRepo:       deps.TagRepo,
-		accessGrant:   deps.AccessGrant,
+		role:          deps.Role,
 		taskAssignee:  deps.TaskAssignee,
 		store:         deps.Store,
 		hub:           deps.Hub,
@@ -203,17 +203,7 @@ func (h *TaskHandler) Create(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	hasAccess, err := h.accessGrant.HasColumnAccess(r.Context(), workspaceID, columnID, userID)
-	if err != nil {
-		serverError(w, r, err)
-		return
-	}
-	if !hasAccess {
-		notFound(w, r, "column not found")
-		return
-	}
-
-	hasEditAccess, err := h.accessGrant.HasColumnEditAccess(r.Context(), workspaceID, columnID, userID)
+	hasEditAccess, err := h.role.HasWorkspaceEditAccess(r.Context(), workspaceID, userID)
 	if err != nil {
 		serverError(w, r, err)
 		return
@@ -245,22 +235,18 @@ func (h *TaskHandler) Create(w http.ResponseWriter, r *http.Request) {
 	utils.RespondCreated(w, &task.ID)
 }
 
-func (h *TaskHandler) requireTaskAccess(w http.ResponseWriter, r *http.Request, workspaceID, columnID, taskID, userID uuid.UUID) bool {
-	hasColumnAccess, err := h.accessGrant.HasColumnAccess(r.Context(), workspaceID, columnID, userID)
+// requireTaskAccess checks that the user can see the task: either through a
+// task-specific assignment, or through organisation-level access to the
+// workspace. Writes a 404 response and returns false otherwise (columnID is
+// unused now that columns carry no access scope of their own, kept for call
+// symmetry with the route params).
+func (h *TaskHandler) requireTaskAccess(w http.ResponseWriter, r *http.Request, workspaceID, _ /* columnID */, taskID, userID uuid.UUID) bool {
+	hasAccess, err := h.role.HasTaskAccess(r.Context(), workspaceID, taskID, userID)
 	if err != nil {
 		serverError(w, r, err)
 		return false
 	}
-	if hasColumnAccess {
-		return true
-	}
-
-	isAssigned, err := h.taskAssignee.HasAccess(r.Context(), taskID, userID)
-	if err != nil {
-		serverError(w, r, err)
-		return false
-	}
-	if !isAssigned {
+	if !hasAccess {
 		notFound(w, r, "task not found")
 		return false
 	}
@@ -268,28 +254,20 @@ func (h *TaskHandler) requireTaskAccess(w http.ResponseWriter, r *http.Request, 
 }
 
 // requireTaskEditAccess checks that the user holds an 'edit' role on the
-// task, either via the column's access grant or a direct task assignment.
-// Writes an error response and returns false if access is missing.
+// task. A task-specific assignment, if any, is authoritative — it always
+// wins over the organisation role, even when less permissive. Writes an
+// error response and returns false if access is missing.
 func (h *TaskHandler) requireTaskEditAccess(w http.ResponseWriter, r *http.Request, workspaceID, columnID, taskID, userID uuid.UUID) bool {
 	if !h.requireTaskAccess(w, r, workspaceID, columnID, taskID, userID) {
 		return false
 	}
 
-	hasColumnEditAccess, err := h.accessGrant.HasColumnEditAccess(r.Context(), workspaceID, columnID, userID)
+	hasEditAccess, err := h.role.HasTaskEditAccess(r.Context(), workspaceID, taskID, userID)
 	if err != nil {
 		serverError(w, r, err)
 		return false
 	}
-	if hasColumnEditAccess {
-		return true
-	}
-
-	hasAssigneeEditAccess, err := h.taskAssignee.HasEditAccess(r.Context(), taskID, userID)
-	if err != nil {
-		serverError(w, r, err)
-		return false
-	}
-	if !hasAssigneeEditAccess {
+	if !hasEditAccess {
 		forbidden(w, r, "edit access required")
 		return false
 	}
@@ -383,17 +361,7 @@ func (h *TaskHandler) validateTargetColumn(w http.ResponseWriter, r *http.Reques
 		return false
 	}
 
-	hasTargetAccess, err := h.accessGrant.HasColumnAccess(r.Context(), workspaceID, targetColumnID, userID)
-	if err != nil {
-		serverError(w, r, err)
-		return false
-	}
-	if !hasTargetAccess {
-		notFound(w, r, "target column not found in this workspace")
-		return false
-	}
-
-	hasTargetEditAccess, err := h.accessGrant.HasColumnEditAccess(r.Context(), workspaceID, targetColumnID, userID)
+	hasTargetEditAccess, err := h.role.HasWorkspaceEditAccess(r.Context(), workspaceID, userID)
 	if err != nil {
 		serverError(w, r, err)
 		return false
@@ -485,7 +453,7 @@ func (h *TaskHandler) Assignees(w http.ResponseWriter, r *http.Request) {
 
 // Assign godoc
 // @Summary Assign a member to a task
-// @Description The member must already have access to the task's column.
+// @Description Grants the member a task-specific role, independent of their organisation role. This role always takes precedence when resolving the member's effective access to this task. Requires edit access on the task.
 // @Tags task
 // @Accept json
 // @Produce json
@@ -512,7 +480,7 @@ func (h *TaskHandler) Assign(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	if !h.requireTaskAccess(w, r, workspaceID, columnID, taskID, userID) {
+	if !h.requireTaskEditAccess(w, r, workspaceID, columnID, taskID, userID) {
 		return
 	}
 
@@ -521,13 +489,13 @@ func (h *TaskHandler) Assign(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	hasAccess, err := h.accessGrant.HasColumnAccess(r.Context(), workspaceID, columnID, body.MemberID)
+	hasAccess, err := h.role.HasWorkspaceAccess(r.Context(), workspaceID, body.MemberID)
 	if err != nil {
 		serverError(w, r, err)
 		return
 	}
 	if !hasAccess {
-		notFound(w, r, "member not found in this column")
+		notFound(w, r, "member not found in this workspace")
 		return
 	}
 
@@ -564,7 +532,7 @@ func (h *TaskHandler) Unassign(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	if !h.requireTaskAccess(w, r, workspaceID, columnID, taskID, userID) {
+	if !h.requireTaskEditAccess(w, r, workspaceID, columnID, taskID, userID) {
 		return
 	}
 
@@ -579,4 +547,32 @@ func (h *TaskHandler) Unassign(w http.ResponseWriter, r *http.Request) {
 	}
 
 	utils.RespondDeleted(w)
+}
+
+// Roles godoc
+// @Summary List the caller's resolved role for every task in a workspace
+// @Description Single query resolving, for every task the caller can see, their effective role: a task_assignees entry always wins over the caller's organisation role.
+// @Tags task
+// @Produce json
+// @Param id path string true "Workspace ID"
+// @Success 200 {array} models.TaskRole
+// @Failure 400 {object} utils.ErrorResponse
+// @Failure 401 {object} utils.ErrorResponse
+// @Failure 404 {object} utils.ErrorResponse
+// @Failure 500 {object} utils.ErrorResponse
+// @Security BearerAuth
+// @Router /workspaces/{id}/tasks/roles [get]
+func (h *TaskHandler) Roles(w http.ResponseWriter, r *http.Request) {
+	userID, workspaceID, ok := requireWorkspace(w, r, h.workspaceRepo)
+	if !ok {
+		return
+	}
+
+	roles, err := h.role.ListTaskRoles(r.Context(), workspaceID, userID)
+	if err != nil {
+		serverError(w, r, err)
+		return
+	}
+
+	utils.RespondJSON(w, http.StatusOK, roles)
 }
