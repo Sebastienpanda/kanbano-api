@@ -13,7 +13,7 @@ import (
 type ColumnHandler struct {
 	repo          *repository.ColumnRepository
 	workspaceRepo *repository.WorkspaceRepository
-	accessGrant   *repository.AccessGrantRepository
+	role          *repository.RoleRepository
 	hub           *ws.Hub
 }
 
@@ -26,8 +26,8 @@ type updateColumnBody struct {
 	Position *int    `json:"position,omitempty" validate:"omitempty,min=0"`
 }
 
-func NewColumnHandler(repo *repository.ColumnRepository, workspaceRepo *repository.WorkspaceRepository, accessGrant *repository.AccessGrantRepository, hub *ws.Hub) *ColumnHandler {
-	return &ColumnHandler{repo: repo, workspaceRepo: workspaceRepo, accessGrant: accessGrant, hub: hub}
+func NewColumnHandler(repo *repository.ColumnRepository, workspaceRepo *repository.WorkspaceRepository, role *repository.RoleRepository, hub *ws.Hub) *ColumnHandler {
+	return &ColumnHandler{repo: repo, workspaceRepo: workspaceRepo, role: role, hub: hub}
 }
 
 // Names godoc
@@ -72,26 +72,11 @@ func (h *ColumnHandler) parseColumnContext(w http.ResponseWriter, r *http.Reques
 }
 
 // requireWorkspaceEditAccess checks that the user holds an 'edit' role on the
-// workspace (owner, org member, or access grant). Writes a 403 response and
-// returns false otherwise.
+// workspace (owner, org owner, or org member with role='edit'). Columns have
+// no access scope of their own — they inherit the workspace's role. Writes a
+// 403 response and returns false otherwise.
 func (h *ColumnHandler) requireWorkspaceEditAccess(w http.ResponseWriter, r *http.Request, workspaceID, userID uuid.UUID) bool {
-	hasEditAccess, err := h.accessGrant.HasWorkspaceEditAccess(r.Context(), workspaceID, userID)
-	if err != nil {
-		serverError(w, r, err)
-		return false
-	}
-	if !hasEditAccess {
-		forbidden(w, r, "edit access required")
-		return false
-	}
-	return true
-}
-
-// requireColumnEditAccess checks that the user holds an 'edit' role on the
-// column (owner, org member, workspace-level, or column-level grant). Writes
-// a 403 response and returns false otherwise.
-func (h *ColumnHandler) requireColumnEditAccess(w http.ResponseWriter, r *http.Request, workspaceID, columnID, userID uuid.UUID) bool {
-	hasEditAccess, err := h.accessGrant.HasColumnEditAccess(r.Context(), workspaceID, columnID, userID)
+	hasEditAccess, err := h.role.HasWorkspaceEditAccess(r.Context(), workspaceID, userID)
 	if err != nil {
 		serverError(w, r, err)
 		return false
@@ -177,7 +162,7 @@ func (h *ColumnHandler) Update(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	if !h.requireColumnEditAccess(w, r, workspaceID, columnID, userID) {
+	if !h.requireWorkspaceEditAccess(w, r, workspaceID, userID) {
 		return
 	}
 
@@ -221,7 +206,7 @@ func (h *ColumnHandler) Delete(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	if !h.requireColumnEditAccess(w, r, workspaceID, columnID, userID) {
+	if !h.requireWorkspaceEditAccess(w, r, workspaceID, userID) {
 		return
 	}
 

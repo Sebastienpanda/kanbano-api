@@ -61,28 +61,121 @@ func (r *OrganisationRepository) GetOrganisationWithMembers(ctx context.Context,
 	return org, nil
 }
 
+// GetMemberRole returns the caller's role within their organisation: 'edit'
+// if they own it, otherwise their organisation_members.role. Returns
+// pgx.ErrNoRows if the user neither owns nor belongs to an organisation.
+func (r *OrganisationRepository) GetMemberRole(ctx context.Context, userID uuid.UUID) (string, error) {
+	var role *string
+	row := r.db.QueryRow(ctx, `
+		SELECT CASE
+			WHEN EXISTS(SELECT 1 FROM organisations WHERE user_id = $1) THEN 'edit'
+			ELSE (
+				SELECT om.role FROM organisation_members om
+				WHERE om.member_id = $1
+				ORDER BY om.joined_at
+				LIMIT 1
+			)
+		END
+		`,
+		userID)
+	if err := row.Scan(&role); err != nil {
+		return "", err
+	}
+	if role == nil {
+		return "", pgx.ErrNoRows
+	}
+	return *role, nil
+}
+
+// GetMemberProfile returns memberID's identity, their organisation role, and
+// their effective role on every workspace of that organisation. It only
+// succeeds if callerID and memberID belong to the same organisation (either
+// as owner or as organisation_members); otherwise it returns
+// pgx.ErrNoRows. A workspace's role follows the same resolution as
+// HasWorkspaceEditAccess: workspace creator or organisation owner is always
+// 'edit', a workspace_members override takes priority when present,
+// otherwise the organisation role applies.
+func (r *OrganisationRepository) GetMemberProfile(ctx context.Context, callerID, memberID uuid.UUID) (models.MemberProfile, error) {
+	var profile models.MemberProfile
+	row := r.db.QueryRow(ctx, `
+		WITH org AS (
+			SELECT o.id, o.user_id AS owner_id
+			FROM organisations o
+			WHERE o.user_id = $1
+			   OR EXISTS(SELECT 1 FROM organisation_members om WHERE om.organisation_id = o.id AND om.member_id = $1)
+			LIMIT 1
+		)
+		SELECT u.id, u.email, u.name, u.avatar_version,
+			CASE WHEN org.owner_id = u.id THEN 'edit' ELSE om.role END AS role
+		FROM org
+		JOIN users u ON u.id = $2
+		LEFT JOIN organisation_members om ON om.organisation_id = org.id AND om.member_id = $2
+		WHERE org.owner_id = $2 OR om.member_id IS NOT NULL
+		`,
+		callerID,
+		memberID)
+	if err := row.Scan(&profile.ID, &profile.Email, &profile.Name, &profile.AvatarVersion, &profile.Role); err != nil {
+		return models.MemberProfile{}, err
+	}
+
+	rows, err := r.db.Query(ctx, `
+		WITH org AS (
+			SELECT o.id, o.user_id AS owner_id
+			FROM organisations o
+			WHERE o.user_id = $1
+			   OR EXISTS(SELECT 1 FROM organisation_members om WHERE om.organisation_id = o.id AND om.member_id = $1)
+			LIMIT 1
+		)
+		SELECT
+			w.id,
+			w.name,
+			w.created_at,
+			COALESCE(
+				(SELECT wm.role FROM workspace_members wm WHERE wm.workspace_id = w.id AND wm.member_id = $2),
+				CASE
+					WHEN w.created_by = $2 THEN 'edit'
+					WHEN org.owner_id = $2 THEN 'edit'
+					ELSE (SELECT om.role FROM organisation_members om WHERE om.organisation_id = org.id AND om.member_id = $2)
+				END
+			) AS role
+		FROM workspaces w, org
+		WHERE w.organisation_id = org.id
+		  AND w.deleted_at IS NULL
+		ORDER BY w.name
+		`,
+		callerID,
+		memberID)
+	if err != nil {
+		return models.MemberProfile{}, err
+	}
+
+	profile.Workspaces, err = pgx.CollectRows(rows, pgx.RowToStructByName[models.WorkspaceRole])
+	if err != nil {
+		return models.MemberProfile{}, err
+	}
+	if profile.Workspaces == nil {
+		profile.Workspaces = []models.WorkspaceRole{}
+	}
+
+	return profile, nil
+}
+
 type InvitationParams struct {
 	OrganisationID uuid.UUID
 	Email          string
 	InvitedBy      uuid.UUID
-	WorkspaceID    *uuid.UUID
-	ColumnID       *uuid.UUID
-	TaskID         *uuid.UUID
 	Role           *string
 }
 
 func (r *OrganisationRepository) CreateInvitation(ctx context.Context, params InvitationParams) (models.OrganisationInvitation, error) {
 	invitation, err := queryStruct[models.OrganisationInvitation](ctx, r.db, `
-		INSERT INTO organisation_invitations (organisation_id, email, invited_by, workspace_id, column_id, task_id, role)
-		VALUES ($1, $2, $3, $4, $5, $6, $7)
-		RETURNING id, organisation_id, email, invited_by, status, created_at, responded_at, workspace_id, column_id, task_id, role
+		INSERT INTO organisation_invitations (organisation_id, email, invited_by, role)
+		VALUES ($1, $2, $3, $4)
+		RETURNING id, organisation_id, email, invited_by, status, created_at, responded_at, role
 		`,
 		params.OrganisationID,
 		params.Email,
 		params.InvitedBy,
-		params.WorkspaceID,
-		params.ColumnID,
-		params.TaskID,
 		params.Role)
 
 	var pgErr *pgconn.PgError
@@ -94,7 +187,7 @@ func (r *OrganisationRepository) CreateInvitation(ctx context.Context, params In
 
 func (r *OrganisationRepository) ListSentInvitations(ctx context.Context, organisationID uuid.UUID, limit, offset int) ([]models.OrganisationInvitation, error) {
 	rows, err := r.db.Query(ctx, `
-		SELECT id, organisation_id, email, invited_by, status, created_at, responded_at, workspace_id, column_id, task_id, role
+		SELECT id, organisation_id, email, invited_by, status, created_at, responded_at, role
 		FROM organisation_invitations
 		WHERE organisation_id = $1
 		  AND status = 'pending'
@@ -112,7 +205,7 @@ func (r *OrganisationRepository) ListSentInvitations(ctx context.Context, organi
 
 func (r *OrganisationRepository) ListReceivedInvitations(ctx context.Context, email string, limit, offset int) ([]models.OrganisationInvitation, error) {
 	rows, err := r.db.Query(ctx, `
-		SELECT id, organisation_id, email, invited_by, status, created_at, responded_at, workspace_id, column_id, task_id, role
+		SELECT id, organisation_id, email, invited_by, status, created_at, responded_at, role
 		FROM organisation_invitations
 		WHERE LOWER(email) = LOWER($1)
 		  AND status = 'pending'
@@ -142,7 +235,7 @@ func (r *OrganisationRepository) AcceptInvitation(ctx context.Context, invitatio
 		WHERE id = $1
 		  AND LOWER(email) = LOWER($2)
 		  AND status = 'pending'
-		RETURNING id, organisation_id, email, invited_by, status, created_at, responded_at, workspace_id, column_id, task_id, role
+		RETURNING id, organisation_id, email, invited_by, status, created_at, responded_at, role
 		`,
 		invitationID,
 		email)
@@ -150,21 +243,8 @@ func (r *OrganisationRepository) AcceptInvitation(ctx context.Context, invitatio
 		return models.OrganisationInvitation{}, err
 	}
 
-	if invitation.WorkspaceID == nil {
-		if err := applyOrgMembership(ctx, tx, &invitation, userID); err != nil {
-			return models.OrganisationInvitation{}, err
-		}
-	}
-
-	switch {
-	case invitation.WorkspaceID != nil && invitation.TaskID != nil:
-		if err := applyTaskAssignment(ctx, tx, &invitation, userID); err != nil {
-			return models.OrganisationInvitation{}, err
-		}
-	case invitation.WorkspaceID != nil:
-		if err := applyWorkspaceAccessGrant(ctx, tx, &invitation, userID); err != nil {
-			return models.OrganisationInvitation{}, err
-		}
+	if err := applyOrgMembership(ctx, tx, &invitation, userID); err != nil {
+		return models.OrganisationInvitation{}, err
 	}
 
 	if err := tx.Commit(ctx); err != nil {
@@ -193,42 +273,6 @@ func applyOrgMembership(ctx context.Context, tx pgx.Tx, invitation *models.Organ
 	return err
 }
 
-func applyTaskAssignment(ctx context.Context, tx pgx.Tx, invitation *models.OrganisationInvitation, userID uuid.UUID) error {
-	_, err := tx.Exec(ctx, `
-		INSERT INTO task_assignees (task_id, member_id, role, assigned_by)
-		VALUES ($1, $2, $3, $4)
-		ON CONFLICT (task_id, member_id) DO UPDATE SET role = EXCLUDED.role
-		`,
-		*invitation.TaskID,
-		userID,
-		invitationRole(invitation),
-		invitation.InvitedBy)
-	return err
-}
-
-func applyWorkspaceAccessGrant(ctx context.Context, tx pgx.Tx, invitation *models.OrganisationInvitation, userID uuid.UUID) error {
-	insertAccessGrant := `
-		INSERT INTO access_grants (workspace_id, column_id, member_id, role, granted_by)
-		VALUES ($1, $2, $3, $4, $5)
-		ON CONFLICT (member_id, workspace_id) WHERE column_id IS NULL DO UPDATE SET role = EXCLUDED.role
-		`
-	if invitation.ColumnID != nil {
-		insertAccessGrant = `
-		INSERT INTO access_grants (workspace_id, column_id, member_id, role, granted_by)
-		VALUES ($1, $2, $3, $4, $5)
-		ON CONFLICT (member_id, column_id) WHERE column_id IS NOT NULL DO UPDATE SET role = EXCLUDED.role
-		`
-	}
-
-	_, err := tx.Exec(ctx, insertAccessGrant,
-		*invitation.WorkspaceID,
-		invitation.ColumnID,
-		userID,
-		invitationRole(invitation),
-		invitation.InvitedBy)
-	return err
-}
-
 func (r *OrganisationRepository) DeclineInvitation(ctx context.Context, invitationID uuid.UUID, email string) (models.OrganisationInvitation, error) {
 	return queryStruct[models.OrganisationInvitation](ctx, r.db, `
 		UPDATE organisation_invitations
@@ -237,7 +281,7 @@ func (r *OrganisationRepository) DeclineInvitation(ctx context.Context, invitati
 		WHERE id = $1
 		  AND LOWER(email) = LOWER($2)
 		  AND status = 'pending'
-		RETURNING id, organisation_id, email, invited_by, status, created_at, responded_at, workspace_id, column_id, task_id, role
+		RETURNING id, organisation_id, email, invited_by, status, created_at, responded_at, role
 		`,
 		invitationID,
 		email)

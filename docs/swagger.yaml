@@ -86,8 +86,6 @@ definitions:
     type: object
   handler.inviteBody:
     properties:
-      column_id:
-        type: string
       email:
         type: string
       role:
@@ -95,9 +93,17 @@ definitions:
         - view
         - edit
         type: string
-      task_id:
+    required:
+    - email
+    type: object
+  handler.inviteTaskGuestBody:
+    properties:
+      email:
         type: string
-      workspace_id:
+      role:
+        enum:
+        - view
+        - edit
         type: string
     required:
     - email
@@ -122,6 +128,30 @@ definitions:
     - email
     - id
     - name
+    type: object
+  handler.memberProfileResponse:
+    properties:
+      avatar:
+        $ref: '#/definitions/models.AvatarSet'
+      email:
+        type: string
+      id:
+        type: string
+      name:
+        type: string
+      role:
+        type: string
+      workspaces:
+        items:
+          $ref: '#/definitions/models.WorkspaceRole'
+        type: array
+    required:
+    - avatar
+    - email
+    - id
+    - name
+    - role
+    - workspaces
     type: object
   handler.memberResponse:
     properties:
@@ -156,6 +186,23 @@ definitions:
     - id
     - members
     - user_id
+    type: object
+  handler.roleResponse:
+    properties:
+      role:
+        type: string
+    required:
+    - role
+    type: object
+  handler.setWorkspaceRoleBody:
+    properties:
+      role:
+        enum:
+        - view
+        - edit
+        type: string
+    required:
+    - role
     type: object
   handler.updateColumnBody:
     properties:
@@ -218,6 +265,16 @@ definitions:
       targetColumnId:
         type: string
     type: object
+  handler.updateTaskGuestInvitationBody:
+    properties:
+      status:
+        enum:
+        - accepted
+        - declined
+        type: string
+    required:
+    - status
+    type: object
   handler.updateWorkspaceBody:
     properties:
       description:
@@ -227,6 +284,21 @@ definitions:
         maxLength: 100
         minLength: 1
         type: string
+    type: object
+  models.AbilityRule:
+    properties:
+      action:
+        type: string
+      conditions:
+        additionalProperties: {}
+        type: object
+      inverted:
+        type: boolean
+      subject:
+        type: string
+    required:
+    - action
+    - subject
     type: object
   models.AvatarFormats:
     properties:
@@ -276,11 +348,6 @@ definitions:
         type: string
       position:
         type: integer
-      role:
-        description: |-
-          Role is the current user's effective role on this column ('edit' or
-          'view'), i.e. whether they can create/edit/move tasks in it.
-        type: string
       tasks:
         items:
           $ref: '#/definitions/models.TaskWithTag'
@@ -293,7 +360,6 @@ definitions:
     - id
     - name
     - position
-    - role
     - tasks
     - updated_at
     type: object
@@ -327,8 +393,6 @@ definitions:
     type: object
   models.OrganisationInvitation:
     properties:
-      column_id:
-        type: string
       created_at:
         type: string
       email:
@@ -345,12 +409,7 @@ definitions:
         type: string
       status:
         type: string
-      task_id:
-        type: string
-      workspace_id:
-        type: string
     required:
-    - column_id
     - created_at
     - email
     - id
@@ -359,8 +418,6 @@ definitions:
     - responded_at
     - role
     - status
-    - task_id
-    - workspace_id
     type: object
   models.Tag:
     properties:
@@ -431,6 +488,50 @@ definitions:
     - id
     - name
     - role
+    type: object
+  models.TaskGuest:
+    properties:
+      created_at:
+        type: string
+      email:
+        type: string
+      id:
+        type: string
+      invited_by:
+        type: string
+      responded_at:
+        type: string
+      role:
+        type: string
+      status:
+        type: string
+      task_id:
+        type: string
+      user_id:
+        type: string
+    required:
+    - created_at
+    - email
+    - id
+    - invited_by
+    - responded_at
+    - role
+    - status
+    - task_id
+    - user_id
+    type: object
+  models.TaskRole:
+    properties:
+      column_id:
+        type: string
+      role:
+        type: string
+      task_id:
+        type: string
+    required:
+    - column_id
+    - role
+    - task_id
     type: object
   models.TaskWithTag:
     properties:
@@ -522,11 +623,6 @@ definitions:
         type: string
       name:
         type: string
-      role:
-        description: |-
-          Role is the current user's effective role on the workspace as a whole
-          ('edit' or 'view'), i.e. whether they can create columns.
-        type: string
       updated_at:
         type: string
     required:
@@ -535,8 +631,23 @@ definitions:
     - description
     - id
     - name
-    - role
     - updated_at
+    type: object
+  models.WorkspaceRole:
+    properties:
+      created_at:
+        type: string
+      id:
+        type: string
+      name:
+        type: string
+      role:
+        type: string
+    required:
+    - created_at
+    - id
+    - name
+    - role
     type: object
   utils.CreateResponse:
     properties:
@@ -661,6 +772,96 @@ paths:
       summary: List request/error logs (admin only)
       tags:
       - log
+  /guest-invitations/{id}:
+    patch:
+      consumes:
+      - application/json
+      parameters:
+      - description: Invitation ID
+        in: path
+        name: id
+        required: true
+        type: string
+      - description: New status
+        in: body
+        name: body
+        required: true
+        schema:
+          $ref: '#/definitions/handler.updateTaskGuestInvitationBody'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/utils.UpdateResponse'
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/utils.ErrorResponse'
+        "401":
+          description: Unauthorized
+          schema:
+            $ref: '#/definitions/utils.ErrorResponse'
+        "404":
+          description: Not Found
+          schema:
+            $ref: '#/definitions/utils.ErrorResponse'
+        "422":
+          description: Unprocessable Entity
+          schema:
+            additionalProperties: true
+            type: object
+        "500":
+          description: Internal Server Error
+          schema:
+            $ref: '#/definitions/utils.ErrorResponse'
+      security:
+      - BearerAuth: []
+      summary: Accept or decline a task guest invitation
+      tags:
+      - task
+  /guest-invitations/received:
+    get:
+      parameters:
+      - description: Page size (default 50, max 200)
+        in: query
+        name: limit
+        type: integer
+      - description: Page offset (default 0)
+        in: query
+        name: offset
+        type: integer
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            items:
+              $ref: '#/definitions/models.TaskGuest'
+            type: array
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/utils.ErrorResponse'
+        "401":
+          description: Unauthorized
+          schema:
+            $ref: '#/definitions/utils.ErrorResponse'
+        "404":
+          description: Not Found
+          schema:
+            $ref: '#/definitions/utils.ErrorResponse'
+        "500":
+          description: Internal Server Error
+          schema:
+            $ref: '#/definitions/utils.ErrorResponse'
+      security:
+      - BearerAuth: []
+      summary: List task guest invitations received by the current user
+      tags:
+      - task
   /me:
     get:
       produces:
@@ -829,8 +1030,7 @@ paths:
     post:
       consumes:
       - application/json
-      description: Sends an organization-level invitation, or a scoped invitation
-        when workspace_id, column_id, and task_id are all provided together.
+      description: Sends an organisation-level invitation by email.
       parameters:
       - description: Invitation to create
         in: body
@@ -1006,6 +1206,93 @@ paths:
       summary: List invitations sent by the organisation
       tags:
       - organisation
+  /organisation/members/{id}/profile:
+    get:
+      description: Returns the member's identity, organisation role, and effective
+        role on every workspace of the organisation. The caller must belong to the
+        same organisation as the target member.
+      parameters:
+      - description: Member ID (user ID)
+        in: path
+        name: id
+        required: true
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/handler.memberProfileResponse'
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/utils.ErrorResponse'
+        "401":
+          description: Unauthorized
+          schema:
+            $ref: '#/definitions/utils.ErrorResponse'
+        "404":
+          description: Not Found
+          schema:
+            $ref: '#/definitions/utils.ErrorResponse'
+        "500":
+          description: Internal Server Error
+          schema:
+            $ref: '#/definitions/utils.ErrorResponse'
+      security:
+      - BearerAuth: []
+      summary: Get a member's profile within the organisation
+      tags:
+      - organisation
+  /roles:
+    get:
+      description: Returns the caller's effective role ('edit' or 'view') at a given
+        point in time. With no query params, returns their organisation role. With
+        workspace_id set, returns their workspace role, optionally narrowed with task_id
+        to the role that actually applies there — a task-specific assignment always
+        wins over the organisation role.
+      parameters:
+      - description: Workspace ID
+        in: query
+        name: workspace_id
+        type: string
+      - description: Task ID (requires workspace_id)
+        in: query
+        name: task_id
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/handler.roleResponse'
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/utils.ErrorResponse'
+        "401":
+          description: Unauthorized
+          schema:
+            $ref: '#/definitions/utils.ErrorResponse'
+        "403":
+          description: Forbidden
+          schema:
+            $ref: '#/definitions/utils.ErrorResponse'
+        "404":
+          description: Not Found
+          schema:
+            $ref: '#/definitions/utils.ErrorResponse'
+        "500":
+          description: Internal Server Error
+          schema:
+            $ref: '#/definitions/utils.ErrorResponse'
+      security:
+      - BearerAuth: []
+      summary: Get the caller's effective role for a scope
+      tags:
+      - role
   /tags:
     get:
       parameters:
@@ -1343,6 +1630,52 @@ paths:
       summary: Update a workspace
       tags:
       - workspace
+  /workspaces/{id}/abilities:
+    get:
+      description: Returns the caller's permissions on the workspace as a list of
+        CASL rules (action/subject/conditions), consumable directly by @casl/ability's
+        createMongoAbility(rules) on the Angular side. Covers the Workspace, Column
+        and Task subjects, including per-task overrides from task assignments.
+      parameters:
+      - description: Workspace ID
+        in: path
+        name: id
+        required: true
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            items:
+              $ref: '#/definitions/models.AbilityRule'
+            type: array
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/utils.ErrorResponse'
+        "401":
+          description: Unauthorized
+          schema:
+            $ref: '#/definitions/utils.ErrorResponse'
+        "403":
+          description: Forbidden
+          schema:
+            $ref: '#/definitions/utils.ErrorResponse'
+        "404":
+          description: Not Found
+          schema:
+            $ref: '#/definitions/utils.ErrorResponse'
+        "500":
+          description: Internal Server Error
+          schema:
+            $ref: '#/definitions/utils.ErrorResponse'
+      security:
+      - BearerAuth: []
+      summary: Get the caller's CASL abilities for a workspace
+      tags:
+      - role
   /workspaces/{id}/columns:
     post:
       consumes:
@@ -1689,7 +2022,9 @@ paths:
     post:
       consumes:
       - application/json
-      description: The member must already have access to the task's column.
+      description: Grants the member a task-specific role, independent of their organisation
+        role. This role always takes precedence when resolving the member's effective
+        access to this task. Requires edit access on the task.
       parameters:
       - description: Workspace ID
         in: path
@@ -1790,6 +2125,127 @@ paths:
       summary: Unassign a member from a task
       tags:
       - task
+  /workspaces/{id}/columns/{columnId}/tasks/{taskId}/guests:
+    get:
+      parameters:
+      - description: Workspace ID
+        in: path
+        name: id
+        required: true
+        type: string
+      - description: Column ID
+        in: path
+        name: columnId
+        required: true
+        type: string
+      - description: Task ID
+        in: path
+        name: taskId
+        required: true
+        type: string
+      - description: Page size (default 50, max 200)
+        in: query
+        name: limit
+        type: integer
+      - description: Page offset (default 0)
+        in: query
+        name: offset
+        type: integer
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            items:
+              $ref: '#/definitions/models.TaskGuest'
+            type: array
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/utils.ErrorResponse'
+        "401":
+          description: Unauthorized
+          schema:
+            $ref: '#/definitions/utils.ErrorResponse'
+        "404":
+          description: Not Found
+          schema:
+            $ref: '#/definitions/utils.ErrorResponse'
+        "500":
+          description: Internal Server Error
+          schema:
+            $ref: '#/definitions/utils.ErrorResponse'
+      security:
+      - BearerAuth: []
+      summary: List pending guest invitations sent for a task
+      tags:
+      - task
+    post:
+      consumes:
+      - application/json
+      description: Invites someone by email to a single task, without granting any
+        organisation membership. They can accept even without an existing Kanbano
+        account.
+      parameters:
+      - description: Workspace ID
+        in: path
+        name: id
+        required: true
+        type: string
+      - description: Column ID
+        in: path
+        name: columnId
+        required: true
+        type: string
+      - description: Task ID
+        in: path
+        name: taskId
+        required: true
+        type: string
+      - description: Invitation to create
+        in: body
+        name: body
+        required: true
+        schema:
+          $ref: '#/definitions/handler.inviteTaskGuestBody'
+      produces:
+      - application/json
+      responses:
+        "201":
+          description: Created
+          schema:
+            $ref: '#/definitions/utils.CreateResponse'
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/utils.ErrorResponse'
+        "401":
+          description: Unauthorized
+          schema:
+            $ref: '#/definitions/utils.ErrorResponse'
+        "404":
+          description: Not Found
+          schema:
+            $ref: '#/definitions/utils.ErrorResponse'
+        "409":
+          description: Conflict
+          schema:
+            $ref: '#/definitions/utils.ErrorResponse'
+        "422":
+          description: Unprocessable Entity
+          schema:
+            additionalProperties: true
+            type: object
+        "500":
+          description: Internal Server Error
+          schema:
+            $ref: '#/definitions/utils.ErrorResponse'
+      security:
+      - BearerAuth: []
+      summary: Invite an external guest to a task
+      tags:
+      - task
   /workspaces/{id}/columns/names:
     get:
       parameters:
@@ -1828,6 +2284,108 @@ paths:
       summary: List column names
       tags:
       - column
+  /workspaces/{id}/members/{memberID}/role:
+    put:
+      consumes:
+      - application/json
+      description: Sets a member's effective role on this workspace, overriding their
+        organisation-wide role. Only callers with organisation-level 'edit' (manage)
+        may call this — that includes changing their own workspace role.
+      parameters:
+      - description: Workspace ID
+        in: path
+        name: id
+        required: true
+        type: string
+      - description: Member ID (user ID)
+        in: path
+        name: memberID
+        required: true
+        type: string
+      - description: New role
+        in: body
+        name: body
+        required: true
+        schema:
+          $ref: '#/definitions/handler.setWorkspaceRoleBody'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/utils.UpdateResponse'
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/utils.ErrorResponse'
+        "401":
+          description: Unauthorized
+          schema:
+            $ref: '#/definitions/utils.ErrorResponse'
+        "403":
+          description: Forbidden
+          schema:
+            $ref: '#/definitions/utils.ErrorResponse'
+        "404":
+          description: Not Found
+          schema:
+            $ref: '#/definitions/utils.ErrorResponse'
+        "422":
+          description: Unprocessable Entity
+          schema:
+            additionalProperties: true
+            type: object
+        "500":
+          description: Internal Server Error
+          schema:
+            $ref: '#/definitions/utils.ErrorResponse'
+      security:
+      - BearerAuth: []
+      summary: Override a member's role on a workspace
+      tags:
+      - role
+  /workspaces/{id}/tasks/roles:
+    get:
+      description: 'Single query resolving, for every task the caller can see, their
+        effective role: a task_assignees entry always wins over the caller''s organisation
+        role.'
+      parameters:
+      - description: Workspace ID
+        in: path
+        name: id
+        required: true
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            items:
+              $ref: '#/definitions/models.TaskRole'
+            type: array
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/utils.ErrorResponse'
+        "401":
+          description: Unauthorized
+          schema:
+            $ref: '#/definitions/utils.ErrorResponse'
+        "404":
+          description: Not Found
+          schema:
+            $ref: '#/definitions/utils.ErrorResponse'
+        "500":
+          description: Internal Server Error
+          schema:
+            $ref: '#/definitions/utils.ErrorResponse'
+      security:
+      - BearerAuth: []
+      summary: List the caller's resolved role for every task in a workspace
+      tags:
+      - task
   /ws:
     get:
       description: Upgrades to a WebSocket connection. The JWT is passed via the Sec-WebSocket-Protocol
