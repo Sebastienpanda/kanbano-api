@@ -101,7 +101,10 @@ func NewRequestLogger(logRepo *repository.LogRepository) func(http.Handler) http
 				attrs = append(attrs, slog.String("error_body", errorBody))
 			}
 
-			if status >= 400 {
+			// A 404 without ErrorDetail comes from no handler (unknown route):
+			// internet scanners (/.env, /wp-json, ...) that would flood the logs table.
+			isRouteNotFound := status == http.StatusNotFound && errDetail.Message == ""
+			if status >= 400 && !isRouteNotFound {
 				persistErrorLog(logRepo, r, status, errDetail, errorBody)
 			}
 
