@@ -21,6 +21,8 @@ func SetupRouter(pool *pgxpool.Pool, store *storage.Client) *chi.Mux {
 
 	logRepo := repository.NewLogRepository(pool)
 
+	appmiddleware.SetTrustedProxies(getTrustedProxies())
+
 	r := chi.NewRouter()
 	r.Use(appmiddleware.WithRequestID)
 	r.Use(appmiddleware.NewRequestLogger(logRepo))
@@ -30,7 +32,6 @@ func SetupRouter(pool *pgxpool.Pool, store *storage.Client) *chi.Mux {
 		AllowedMethods: []string{"GET", "POST", "PATCH", "PUT", "DELETE"},
 		AllowedHeaders: []string{"Accept", "Authorization", "Content-Type"},
 	}))
-	appmiddleware.SetTrustedProxies(getTrustedProxies())
 	r.Use(appmiddleware.NoStore)
 	r.Use(appmiddleware.RateLimit(rate.Limit(10), 30))
 
