@@ -130,5 +130,6 @@ func RegisterRoutes(r *chi.Mux, pool *pgxpool.Pool, store *storage.Client) {
 		})
 	})
 
+	HealthRoutes(r)
 	BrevoRoutes(r, h.brevo)
 }
