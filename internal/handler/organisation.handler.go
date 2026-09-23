@@ -118,7 +118,7 @@ type memberProfileResponse struct {
 
 // MemberProfile godoc
 // @Summary Get a member's profile within the organisation
-// @Description Returns the member's identity, organisation role, and effective role on every workspace of the organisation. The caller must belong to the same organisation as the target member.
+// @Description Returns the member's identity, organisation role, and, for every workspace of the organisation, whether it is visible to them ('private' by default, 'public') and their role there ('view' by default, 'edit'). The caller must belong to the same organisation as the target member.
 // @Tags organisation
 // @Produce json
 // @Param id path string true "Member ID (user ID)"

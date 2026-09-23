@@ -24,22 +24,19 @@ func NewRoleRepository(db *pgxpool.Pool) *RoleRepository {
 	return &RoleRepository{db: db}
 }
 
-// HasWorkspaceAccess reports whether the member has any organisation-level
-// access to the workspace (creator, organisation owner, or organisation
-// member, regardless of role).
+// HasWorkspaceAccess reports whether the member has access to the
+// workspace: the workspace creator (= organisation owner), or a member
+// explicitly made 'public' on this workspace via workspace_members.
+// Organisation membership alone no longer grants access — workspaces are
+// private by default.
 func (r *RoleRepository) HasWorkspaceAccess(ctx context.Context, workspaceID, userID uuid.UUID) (bool, error) {
 	var exists bool
 	row := r.db.QueryRow(ctx, `
 		SELECT EXISTS(
 			SELECT 1 FROM workspaces w WHERE w.id = $1 AND w.created_by = $2
 		) OR EXISTS(
-			SELECT 1 FROM workspaces w
-			JOIN organisations o ON o.id = w.organisation_id
-			WHERE w.id = $1 AND o.user_id = $2
-		) OR EXISTS(
-			SELECT 1 FROM organisation_members om
-			JOIN workspaces w ON w.organisation_id = om.organisation_id
-			WHERE w.id = $1 AND om.member_id = $2
+			SELECT 1 FROM workspace_members wm
+			WHERE wm.workspace_id = $1 AND wm.member_id = $2 AND wm.visibility = 'public'
 		)
 		`,
 		workspaceID,
@@ -49,28 +46,18 @@ func (r *RoleRepository) HasWorkspaceAccess(ctx context.Context, workspaceID, us
 }
 
 // HasWorkspaceEditAccess reports whether the member has edit access to the
-// workspace. The workspace creator and the organisation owner always have
-// edit access. For everyone else, a workspace_members override — when
-// present — is authoritative, even if it is less permissive than the
-// organisation role; without an override, the organisation-level role
-// applies.
+// workspace. The workspace creator always has edit access. For everyone
+// else, edit access requires a workspace_members row with visibility
+// 'public' and role 'edit' (role defaults to 'view').
 func (r *RoleRepository) HasWorkspaceEditAccess(ctx context.Context, workspaceID, userID uuid.UUID) (bool, error) {
 	var exists bool
 	row := r.db.QueryRow(ctx, `
 		SELECT
 			EXISTS(SELECT 1 FROM workspaces w WHERE w.id = $1 AND w.created_by = $2)
 			OR EXISTS(
-				SELECT 1 FROM workspaces w
-				JOIN organisations o ON o.id = w.organisation_id
-				WHERE w.id = $1 AND o.user_id = $2
-			)
-			OR COALESCE(
-				(SELECT wm.role = 'edit' FROM workspace_members wm WHERE wm.workspace_id = $1 AND wm.member_id = $2),
-				EXISTS(
-					SELECT 1 FROM organisation_members om
-					JOIN workspaces w ON w.organisation_id = om.organisation_id
-					WHERE w.id = $1 AND om.member_id = $2 AND om.role = 'edit'
-				)
+				SELECT 1 FROM workspace_members wm
+				WHERE wm.workspace_id = $1 AND wm.member_id = $2
+				  AND wm.visibility = 'public' AND wm.role = 'edit'
 			)
 		`,
 		workspaceID,
@@ -90,13 +77,8 @@ func (r *RoleRepository) HasTaskAccess(ctx context.Context, workspaceID, taskID,
 		) OR EXISTS(
 			SELECT 1 FROM workspaces w WHERE w.id = $1 AND w.created_by = $3
 		) OR EXISTS(
-			SELECT 1 FROM workspaces w
-			JOIN organisations o ON o.id = w.organisation_id
-			WHERE w.id = $1 AND o.user_id = $3
-		) OR EXISTS(
-			SELECT 1 FROM organisation_members om
-			JOIN workspaces w ON w.organisation_id = om.organisation_id
-			WHERE w.id = $1 AND om.member_id = $3
+			SELECT 1 FROM workspace_members wm
+			WHERE wm.workspace_id = $1 AND wm.member_id = $3 AND wm.visibility = 'public'
 		)
 		`,
 		workspaceID,
@@ -108,9 +90,9 @@ func (r *RoleRepository) HasTaskAccess(ctx context.Context, workspaceID, taskID,
 
 // HasTaskEditAccess reports whether the member can edit the given task. A
 // task-specific assignment, when present, is authoritative: its role alone
-// decides, even if the member's organisation role would otherwise grant (or
-// deny) edit access. Without an assignment, the organisation-level edit
-// role applies.
+// decides, even if the member's workspace role would otherwise grant (or
+// deny) edit access. Without an assignment, the workspace-level edit role
+// applies.
 func (r *RoleRepository) HasTaskEditAccess(ctx context.Context, workspaceID, taskID, userID uuid.UUID) (bool, error) {
 	var canEdit bool
 	row := r.db.QueryRow(ctx, `
@@ -123,14 +105,9 @@ func (r *RoleRepository) HasTaskEditAccess(ctx context.Context, workspaceID, tas
 			ELSE (
 				EXISTS(SELECT 1 FROM workspaces w WHERE w.id = $1 AND w.created_by = $3)
 				OR EXISTS(
-					SELECT 1 FROM workspaces w
-					JOIN organisations o ON o.id = w.organisation_id
-					WHERE w.id = $1 AND o.user_id = $3
-				)
-				OR EXISTS(
-					SELECT 1 FROM organisation_members om
-					JOIN workspaces w ON w.organisation_id = om.organisation_id
-					WHERE w.id = $1 AND om.member_id = $3 AND om.role = 'edit'
+					SELECT 1 FROM workspace_members wm
+					WHERE wm.workspace_id = $1 AND wm.member_id = $3
+					  AND wm.visibility = 'public' AND wm.role = 'edit'
 				)
 			)
 		END
@@ -142,18 +119,23 @@ func (r *RoleRepository) HasTaskEditAccess(ctx context.Context, workspaceID, tas
 	return canEdit, err
 }
 
-// SetWorkspaceMemberRole overrides a member's role on a single workspace,
-// independently of their organisation-wide role. Only callers with
-// organisation-level 'edit' (manage) should be allowed to call this — that
-// check belongs to the handler, not here.
-func (r *RoleRepository) SetWorkspaceMemberRole(ctx context.Context, workspaceID, memberID uuid.UUID, role string) error {
+// SetWorkspaceMemberAccess overrides a member's visibility and/or role on a
+// single workspace. Both are optional: a nil value keeps the current one on
+// an existing row, or falls back to the column default ('private' /
+// 'view') when the row is created here. Only callers with organisation-level
+// 'edit' (manage) should be allowed to call this — that check belongs to
+// the handler, not here.
+func (r *RoleRepository) SetWorkspaceMemberAccess(ctx context.Context, workspaceID, memberID uuid.UUID, visibility, role *string) error {
 	_, err := r.db.Exec(ctx, `
-		INSERT INTO workspace_members (workspace_id, member_id, role)
-		VALUES ($1, $2, $3)
-		ON CONFLICT (workspace_id, member_id) DO UPDATE SET role = EXCLUDED.role
+		INSERT INTO workspace_members (workspace_id, member_id, visibility, role)
+		VALUES ($1, $2, COALESCE($3, 'private'), COALESCE($4, 'view'))
+		ON CONFLICT (workspace_id, member_id) DO UPDATE
+		SET visibility = COALESCE($3, workspace_members.visibility),
+		    role       = COALESCE($4, workspace_members.role)
 		`,
 		workspaceID,
 		memberID,
+		visibility,
 		role)
 	return err
 }
@@ -194,29 +176,17 @@ func (r *RoleRepository) ResolveTaskRole(ctx context.Context, workspaceID, taskI
 				EXISTS(SELECT 1 FROM task_assignees ta WHERE ta.task_id = $2 AND ta.member_id = $3)
 				OR EXISTS(SELECT 1 FROM workspaces w WHERE w.id = $1 AND w.created_by = $3)
 				OR EXISTS(
-					SELECT 1 FROM workspaces w
-					JOIN organisations o ON o.id = w.organisation_id
-					WHERE w.id = $1 AND o.user_id = $3
-				)
-				OR EXISTS(
-					SELECT 1 FROM organisation_members om
-					JOIN workspaces w ON w.organisation_id = om.organisation_id
-					WHERE w.id = $1 AND om.member_id = $3
+					SELECT 1 FROM workspace_members wm
+					WHERE wm.workspace_id = $1 AND wm.member_id = $3 AND wm.visibility = 'public'
 				)
 			),
 			COALESCE(
 				(SELECT ta.role FROM task_assignees ta WHERE ta.task_id = $2 AND ta.member_id = $3),
 				CASE
 					WHEN EXISTS(SELECT 1 FROM workspaces w WHERE w.id = $1 AND w.created_by = $3) THEN 'edit'
-					WHEN EXISTS(
-						SELECT 1 FROM workspaces w
-						JOIN organisations o ON o.id = w.organisation_id
-						WHERE w.id = $1 AND o.user_id = $3
-					) THEN 'edit'
 					ELSE (
-						SELECT om.role FROM organisation_members om
-						JOIN workspaces w ON w.organisation_id = om.organisation_id
-						WHERE w.id = $1 AND om.member_id = $3
+						SELECT wm.role FROM workspace_members wm
+						WHERE wm.workspace_id = $1 AND wm.member_id = $3 AND wm.visibility = 'public'
 					)
 				END,
 				'view'
@@ -344,40 +314,33 @@ func (r *RoleRepository) ListGuestTaskRoles(ctx context.Context, workspaceID, us
 
 // ListTaskRoles returns, for every task in the workspace the member can see,
 // their effective role. A single query joins task_assignees against the
-// member's organisation role and coalesces between the two, so a
-// task-specific assignment always takes precedence over the organisation
-// role. Tasks the member has no access to at all (no assignment, and no
-// organisation membership) are excluded — including the case where the
+// member's workspace role (workspace_members) and coalesces between the
+// two, so a task-specific assignment always takes precedence. Tasks the
+// member has no access to at all (no assignment, and no public
+// workspace_members entry) are excluded — including the case where the
 // member has only been assigned to a subset of the workspace's tasks.
 func (r *RoleRepository) ListTaskRoles(ctx context.Context, workspaceID, userID uuid.UUID) ([]models.TaskRole, error) {
 	rows, err := r.db.Query(ctx, `
 		WITH org_access AS (
 			SELECT
 				w.id AS workspace_id,
-				(
-					w.created_by = $2
-					OR EXISTS(
-						SELECT 1 FROM organisations o
-						WHERE o.id = w.organisation_id AND o.user_id = $2
-					)
-				) AS is_owner,
-				(
-					SELECT om.role FROM organisation_members om
-					WHERE om.organisation_id = w.organisation_id AND om.member_id = $2
-				) AS org_role
+				(w.created_by = $2) AS is_owner,
+				wm.role AS wm_role,
+				wm.visibility AS wm_visibility
 			FROM workspaces w
+			LEFT JOIN workspace_members wm ON wm.workspace_id = w.id AND wm.member_id = $2
 			WHERE w.id = $1
 		)
 		SELECT
 			t.id AS task_id,
 			t.column_id,
-			COALESCE(ta.role, CASE WHEN oa.is_owner THEN 'edit' ELSE oa.org_role END) AS role
+			COALESCE(ta.role, CASE WHEN oa.is_owner THEN 'edit' ELSE oa.wm_role END) AS role
 		FROM tasks t
 		JOIN columns c ON c.id = t.column_id AND c.deleted_at IS NULL
 		JOIN org_access oa ON oa.workspace_id = c.workspace_id
 		LEFT JOIN task_assignees ta ON ta.task_id = t.id AND ta.member_id = $2
 		WHERE t.deleted_at IS NULL
-		  AND (ta.member_id IS NOT NULL OR oa.is_owner OR oa.org_role IS NOT NULL)
+		  AND (ta.member_id IS NOT NULL OR oa.is_owner OR oa.wm_visibility = 'public')
 		ORDER BY c.position, t.position
 		`,
 		workspaceID,

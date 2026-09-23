@@ -131,16 +131,17 @@ func (r *OrganisationRepository) GetMemberProfile(ctx context.Context, callerID,
 			w.name,
 			w.created_at,
 			COALESCE(
-				(SELECT wm.role FROM workspace_members wm WHERE wm.workspace_id = w.id AND wm.member_id = $2),
-				CASE
-					WHEN w.created_by = $2 THEN 'edit'
-					WHEN org.owner_id = $2 THEN 'edit'
-					ELSE (SELECT om.role FROM organisation_members om WHERE om.organisation_id = org.id AND om.member_id = $2)
-				END
-			) AS role
-		FROM workspaces w, org
-		WHERE w.organisation_id = org.id
-		  AND w.deleted_at IS NULL
+				CASE WHEN w.created_by = $2 THEN 'edit' ELSE wm.role END,
+				'view'
+			) AS role,
+			COALESCE(
+				CASE WHEN w.created_by = $2 THEN 'public' ELSE wm.visibility END,
+				'private'
+			) AS visibility
+		FROM workspaces w
+		JOIN org ON w.organisation_id = org.id
+		LEFT JOIN workspace_members wm ON wm.workspace_id = w.id AND wm.member_id = $2
+		WHERE w.deleted_at IS NULL
 		ORDER BY w.name
 		`,
 		callerID,

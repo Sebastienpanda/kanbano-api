@@ -9,7 +9,8 @@ import (
 )
 
 type setWorkspaceRoleBody struct {
-	Role string `json:"role" validate:"required,oneof=view edit"`
+	Visibility *string `json:"visibility,omitempty" validate:"omitempty,oneof=private public"`
+	Role       *string `json:"role,omitempty" validate:"omitempty,oneof=view edit"`
 }
 
 type RoleHandler struct {
@@ -137,14 +138,14 @@ func (h *RoleHandler) Abilities(w http.ResponseWriter, r *http.Request) {
 }
 
 // SetWorkspaceRole godoc
-// @Summary Override a member's role on a workspace
-// @Description Sets a member's effective role on this workspace, overriding their organisation-wide role. Only callers with organisation-level 'edit' (manage) may call this — that includes changing their own workspace role.
+// @Summary Override a member's visibility and/or role on a workspace
+// @Description Sets whether this workspace is visible to the member ('private', the default, or 'public') and/or their role on it ('view', the default, or 'edit'). Both fields are optional and independent; omitting one leaves it unchanged (or at its default if this is the member's first override on this workspace). Only callers with organisation-level 'edit' (manage) may call this.
 // @Tags role
 // @Accept json
 // @Produce json
 // @Param id path string true "Workspace ID"
 // @Param memberID path string true "Member ID (user ID)"
-// @Param body body setWorkspaceRoleBody true "New role"
+// @Param body body setWorkspaceRoleBody true "New visibility and/or role"
 // @Success 200 {object} utils.UpdateResponse
 // @Failure 400 {object} utils.ErrorResponse
 // @Failure 401 {object} utils.ErrorResponse
@@ -179,7 +180,7 @@ func (h *RoleHandler) SetWorkspaceRole(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	if err := h.role.SetWorkspaceMemberRole(r.Context(), workspaceID, memberID, body.Role); err != nil {
+	if err := h.role.SetWorkspaceMemberAccess(r.Context(), workspaceID, memberID, body.Visibility, body.Role); err != nil {
 		serverError(w, r, err)
 		return
 	}

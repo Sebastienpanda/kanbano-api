@@ -201,8 +201,11 @@ definitions:
         - view
         - edit
         type: string
-    required:
-    - role
+      visibility:
+        enum:
+        - private
+        - public
+        type: string
     type: object
   handler.updateColumnBody:
     properties:
@@ -643,11 +646,14 @@ definitions:
         type: string
       role:
         type: string
+      visibility:
+        type: string
     required:
     - created_at
     - id
     - name
     - role
+    - visibility
     type: object
   utils.CreateResponse:
     properties:
@@ -1208,9 +1214,10 @@ paths:
       - organisation
   /organisation/members/{id}/profile:
     get:
-      description: Returns the member's identity, organisation role, and effective
-        role on every workspace of the organisation. The caller must belong to the
-        same organisation as the target member.
+      description: Returns the member's identity, organisation role, and, for every
+        workspace of the organisation, whether it is visible to them ('private' by
+        default, 'public') and their role there ('view' by default, 'edit'). The caller
+        must belong to the same organisation as the target member.
       parameters:
       - description: Member ID (user ID)
         in: path
@@ -2288,9 +2295,12 @@ paths:
     put:
       consumes:
       - application/json
-      description: Sets a member's effective role on this workspace, overriding their
-        organisation-wide role. Only callers with organisation-level 'edit' (manage)
-        may call this — that includes changing their own workspace role.
+      description: Sets whether this workspace is visible to the member ('private',
+        the default, or 'public') and/or their role on it ('view', the default, or
+        'edit'). Both fields are optional and independent; omitting one leaves it
+        unchanged (or at its default if this is the member's first override on this
+        workspace). Only callers with organisation-level 'edit' (manage) may call
+        this.
       parameters:
       - description: Workspace ID
         in: path
@@ -2302,7 +2312,7 @@ paths:
         name: memberID
         required: true
         type: string
-      - description: New role
+      - description: New visibility and/or role
         in: body
         name: body
         required: true
@@ -2342,7 +2352,7 @@ paths:
             $ref: '#/definitions/utils.ErrorResponse'
       security:
       - BearerAuth: []
-      summary: Override a member's role on a workspace
+      summary: Override a member's visibility and/or role on a workspace
       tags:
       - role
   /workspaces/{id}/tasks/roles:

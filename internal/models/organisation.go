@@ -32,10 +32,11 @@ type MemberProfile struct {
 }
 
 type WorkspaceRole struct {
-	ID        uuid.UUID `json:"id"`
-	Name      string    `json:"name"`
-	CreatedAt time.Time `json:"created_at"`
-	Role      string    `json:"role"`
+	ID         uuid.UUID `json:"id"`
+	Name       string    `json:"name"`
+	CreatedAt  time.Time `json:"created_at"`
+	Role       string    `json:"role"`
+	Visibility string    `json:"visibility"`
 }
 
 type OrganisationInvitation struct {

@@ -836,7 +836,7 @@ const docTemplate = `{
                         "BearerAuth": []
                     }
                 ],
-                "description": "Returns the member's identity, organisation role, and effective role on every workspace of the organisation. The caller must belong to the same organisation as the target member.",
+                "description": "Returns the member's identity, organisation role, and, for every workspace of the organisation, whether it is visible to them ('private' by default, 'public') and their role there ('view' by default, 'edit'). The caller must belong to the same organisation as the target member.",
                 "produces": [
                     "application/json"
                 ],
@@ -2467,7 +2467,7 @@ const docTemplate = `{
                         "BearerAuth": []
                     }
                 ],
-                "description": "Sets a member's effective role on this workspace, overriding their organisation-wide role. Only callers with organisation-level 'edit' (manage) may call this — that includes changing their own workspace role.",
+                "description": "Sets whether this workspace is visible to the member ('private', the default, or 'public') and/or their role on it ('view', the default, or 'edit'). Both fields are optional and independent; omitting one leaves it unchanged (or at its default if this is the member's first override on this workspace). Only callers with organisation-level 'edit' (manage) may call this.",
                 "consumes": [
                     "application/json"
                 ],
@@ -2477,7 +2477,7 @@ const docTemplate = `{
                 "tags": [
                     "role"
                 ],
-                "summary": "Override a member's role on a workspace",
+                "summary": "Override a member's visibility and/or role on a workspace",
                 "parameters": [
                     {
                         "type": "string",
@@ -2494,7 +2494,7 @@ const docTemplate = `{
                         "required": true
                     },
                     {
-                        "description": "New role",
+                        "description": "New visibility and/or role",
                         "name": "body",
                         "in": "body",
                         "required": true,
@@ -2915,15 +2915,19 @@ const docTemplate = `{
         },
         "handler.setWorkspaceRoleBody": {
             "type": "object",
-            "required": [
-                "role"
-            ],
             "properties": {
                 "role": {
                     "type": "string",
                     "enum": [
                         "view",
                         "edit"
+                    ]
+                },
+                "visibility": {
+                    "type": "string",
+                    "enum": [
+                        "private",
+                        "public"
                     ]
                 }
             }
@@ -3533,7 +3537,7 @@ const docTemplate = `{
                 },
                 "updated_at": {
                     "type": "string"
-                }
+                } 
             }
         },
         "models.WorkspaceRole": {
@@ -3542,7 +3546,8 @@ const docTemplate = `{
                 "created_at",
                 "id",
                 "name",
-                "role"
+                "role",
+                "visibility"
             ],
             "properties": {
                 "created_at": {
@@ -3555,6 +3560,9 @@ const docTemplate = `{
                     "type": "string"
                 },
                 "role": {
+                    "type": "string"
+                },
+                "visibility": {
                     "type": "string"
                 }
             }

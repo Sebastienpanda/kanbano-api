@@ -23,9 +23,8 @@ func (r *WorkspaceRepository) List(ctx context.Context, userID uuid.UUID, limit,
 		WITH accessible_workspaces AS (
 			SELECT id FROM workspaces WHERE created_by = $1
 			UNION
-			SELECT w.id FROM workspaces w
-			JOIN organisation_members om ON om.organisation_id = w.organisation_id
-			WHERE om.member_id = $1
+			SELECT wm.workspace_id FROM workspace_members wm
+			WHERE wm.member_id = $1 AND wm.visibility = 'public'
 		)
 		SELECT
 			w.id,
@@ -58,9 +57,8 @@ func (r *WorkspaceRepository) ListRecent(ctx context.Context, userID uuid.UUID) 
 		WITH accessible_workspaces AS (
 			SELECT id FROM workspaces WHERE created_by = $1
 			UNION
-			SELECT w.id FROM workspaces w
-			JOIN organisation_members om ON om.organisation_id = w.organisation_id
-			WHERE om.member_id = $1
+			SELECT wm.workspace_id FROM workspace_members wm
+			WHERE wm.member_id = $1 AND wm.visibility = 'public'
 		)
 		SELECT
 			w.id,
@@ -91,9 +89,8 @@ func (r *WorkspaceRepository) ListNames(ctx context.Context, userID uuid.UUID) (
 		WITH accessible_workspaces AS (
 			SELECT id FROM workspaces WHERE created_by = $1
 			UNION
-			SELECT w.id FROM workspaces w
-			JOIN organisation_members om ON om.organisation_id = w.organisation_id
-			WHERE om.member_id = $1
+			SELECT wm.workspace_id FROM workspace_members wm
+			WHERE wm.member_id = $1 AND wm.visibility = 'public'
 		)
 		SELECT
 			w.id,
@@ -115,9 +112,8 @@ func (r *WorkspaceRepository) Search(ctx context.Context, userID uuid.UUID, quer
 		WITH accessible_workspaces AS (
 			SELECT id FROM workspaces WHERE created_by = $1
 			UNION
-			SELECT w.id FROM workspaces w
-			JOIN organisation_members om ON om.organisation_id = w.organisation_id
-			WHERE om.member_id = $1
+			SELECT wm.workspace_id FROM workspace_members wm
+			WHERE wm.member_id = $1 AND wm.visibility = 'public'
 		)
 		SELECT
 			w.id,
@@ -153,9 +149,8 @@ func (r *WorkspaceRepository) GetByID(ctx context.Context, id, userID uuid.UUID)
 		WITH accessible_workspaces AS (
 			SELECT id FROM workspaces WHERE created_by = $2
 			UNION
-			SELECT w.id FROM workspaces w
-			JOIN organisation_members om ON om.organisation_id = w.organisation_id
-			WHERE om.member_id = $2
+			SELECT wm.workspace_id FROM workspace_members wm
+			WHERE wm.member_id = $2 AND wm.visibility = 'public'
 		)
 		SELECT
 			w.id,
@@ -394,9 +389,8 @@ func (r *WorkspaceRepository) Exists(ctx context.Context, id, userID uuid.UUID) 
 		WITH accessible_workspaces AS (
 			SELECT id FROM workspaces WHERE created_by = $2
 			UNION
-			SELECT w.id FROM workspaces w
-			JOIN organisation_members om ON om.organisation_id = w.organisation_id
-			WHERE om.member_id = $2
+			SELECT wm.workspace_id FROM workspace_members wm
+			WHERE wm.member_id = $2 AND wm.visibility = 'public'
 			UNION
 			SELECT c.workspace_id FROM task_assignees ta
 			JOIN tasks t ON t.id = ta.task_id
