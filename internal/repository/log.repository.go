@@ -43,6 +43,13 @@ func (r *LogRepository) List(ctx context.Context, level *string, limit, offset i
 }
 
 func (r *LogRepository) Insert(ctx context.Context, level, message, source string, userID, requestID *uuid.UUID, metadata []byte) error {
+	// With QueryExecModeSimpleProtocol, pgx encodes []byte as a bytea literal
+	// ('\x7b...'), which PostgreSQL rejects for a json column: send it as text.
+	var metadataText *string
+	if metadata != nil {
+		s := string(metadata)
+		metadataText = &s
+	}
 	_, err := r.db.Exec(ctx, `
 		INSERT INTO logs (level, message, source, user_id, request_id, metadata)
 		VALUES ($1, $2, $3, $4, $5, $6)
@@ -52,6 +59,6 @@ func (r *LogRepository) Insert(ctx context.Context, level, message, source strin
 		source,
 		userID,
 		requestID,
-		metadata)
+		metadataText)
 	return err
 }
