@@ -77,6 +77,11 @@ func NewRequestLogger(logRepo *repository.LogRepository) func(http.Handler) http
 			if status == 0 {
 				status = http.StatusOK
 			}
+			// Error on a path matching no route: internet scanners (/.git/config,
+			// /.env, /wp-json, ...) that would only flood the logs (stdout and table).
+			if status >= 400 && isUnknownRoute(r) {
+				return
+			}
 			latency := time.Since(start)
 
 			requestID := ""
@@ -101,10 +106,7 @@ func NewRequestLogger(logRepo *repository.LogRepository) func(http.Handler) http
 				attrs = append(attrs, slog.String("error_body", errorBody))
 			}
 
-			// A 404 without ErrorDetail comes from no handler (unknown route):
-			// internet scanners (/.env, /wp-json, ...) that would flood the logs table.
-			isRouteNotFound := status == http.StatusNotFound && errDetail.Message == ""
-			if status >= 400 && !isRouteNotFound {
+			if status >= 400 {
 				persistErrorLog(logRepo, r, status, errDetail, errorBody)
 			}
 
@@ -122,6 +124,16 @@ func NewRequestLogger(logRepo *repository.LogRepository) func(http.Handler) http
 			}
 		})
 	}
+}
+
+// isUnknownRoute reports whether no route of the router matches the request,
+// including when a middleware (e.g. the rate limiter) answered before routing.
+func isUnknownRoute(r *http.Request) bool {
+	rctx := chi.RouteContext(r.Context())
+	if rctx == nil || rctx.Routes == nil {
+		return false
+	}
+	return !rctx.Routes.Match(chi.NewRouteContext(), r.Method, r.URL.Path)
 }
 
 func routePattern(r *http.Request) string {
