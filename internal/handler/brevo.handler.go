@@ -42,9 +42,9 @@ type brevoEvent struct {
 // @Param token query string true "Shared webhook secret"
 // @Param body body brevoEvent true "Brevo event payload"
 // @Success 200 {object} map[string]string
-// @Failure 400 {object} utils.ErrorResponse
-// @Failure 401 {object} utils.ErrorResponse
-// @Failure 415 {object} utils.ErrorResponse
+// @Failure 400 {object} ErrorResponse "could not decode body"
+// @Failure 401 {object} ErrorResponse "unauthorized"
+// @Failure 429 {object} TooManyRequestsResponse "Rate limit exceeded (text/plain)"
 // @Router /../webhooks/brevo [post]
 func (h *BrevoHandler) Webhook(w http.ResponseWriter, r *http.Request) {
 	if h.webhookSecret == "" || !secretMatches(r.URL.Query().Get("token"), h.webhookSecret) {

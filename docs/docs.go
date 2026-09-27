@@ -15,6 +15,35 @@ const docTemplate = `{
     "host": "{{.Host}}",
     "basePath": "{{.BasePath}}",
     "paths": {
+        "/../health": {
+            "get": {
+                "description": "Always answers 200 while the process is up; does not ping the database.",
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "health"
+                ],
+                "summary": "Liveness probe",
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": {
+                                "type": "string"
+                            }
+                        }
+                    },
+                    "429": {
+                        "description": "Rate limit exceeded (text/plain)",
+                        "schema": {
+                            "$ref": "#/definitions/TooManyRequestsResponse"
+                        }
+                    }
+                }
+            }
+        },
         "/../webhooks/brevo": {
             "post": {
                 "description": "Receives Brevo email event callbacks (bounce, spam, etc.), authenticated via a \"token\" query param, and relays failures to Discord if configured.",
@@ -57,21 +86,21 @@ const docTemplate = `{
                         }
                     },
                     "400": {
-                        "description": "Bad Request",
+                        "description": "could not decode body",
                         "schema": {
-                            "$ref": "#/definitions/utils.ErrorResponse"
+                            "$ref": "#/definitions/ErrorResponse"
                         }
                     },
                     "401": {
-                        "description": "Unauthorized",
+                        "description": "unauthorized",
                         "schema": {
-                            "$ref": "#/definitions/utils.ErrorResponse"
+                            "$ref": "#/definitions/ErrorResponse"
                         }
                     },
-                    "415": {
-                        "description": "Unsupported Media Type",
+                    "429": {
+                        "description": "Rate limit exceeded (text/plain)",
                         "schema": {
-                            "$ref": "#/definitions/utils.ErrorResponse"
+                            "$ref": "#/definitions/TooManyRequestsResponse"
                         }
                     }
                 }
@@ -93,8 +122,13 @@ const docTemplate = `{
                 "summary": "List request/error logs (admin only)",
                 "parameters": [
                     {
+                        "enum": [
+                            "info",
+                            "warning",
+                            "error"
+                        ],
                         "type": "string",
-                        "description": "info, warning or error",
+                        "description": "Log level",
                         "name": "level",
                         "in": "query"
                     },
@@ -122,27 +156,33 @@ const docTemplate = `{
                         }
                     },
                     "400": {
-                        "description": "Bad Request",
+                        "description": "invalid level | invalid limit | invalid offset",
                         "schema": {
-                            "$ref": "#/definitions/utils.ErrorResponse"
+                            "$ref": "#/definitions/ErrorResponse"
                         }
                     },
                     "401": {
-                        "description": "Unauthorized",
+                        "description": "Missing or invalid token (text/plain)",
                         "schema": {
-                            "$ref": "#/definitions/utils.ErrorResponse"
+                            "$ref": "#/definitions/UnauthorizedResponse"
                         }
                     },
                     "403": {
-                        "description": "Forbidden",
+                        "description": "Caller is not an administrator (text/plain)",
                         "schema": {
-                            "$ref": "#/definitions/utils.ErrorResponse"
+                            "$ref": "#/definitions/AdminForbiddenResponse"
+                        }
+                    },
+                    "429": {
+                        "description": "Rate limit exceeded (text/plain)",
+                        "schema": {
+                            "$ref": "#/definitions/TooManyRequestsResponse"
                         }
                     },
                     "500": {
                         "description": "Internal Server Error",
                         "schema": {
-                            "$ref": "#/definitions/utils.ErrorResponse"
+                            "$ref": "#/definitions/InternalErrorResponse"
                         }
                     }
                 }
@@ -155,6 +195,7 @@ const docTemplate = `{
                         "BearerAuth": []
                     }
                 ],
+                "description": "Returns the pending invitations that have not expired.",
                 "produces": [
                     "application/json"
                 ],
@@ -187,27 +228,33 @@ const docTemplate = `{
                         }
                     },
                     "400": {
-                        "description": "Bad Request",
+                        "description": "invalid limit | invalid offset",
                         "schema": {
-                            "$ref": "#/definitions/utils.ErrorResponse"
+                            "$ref": "#/definitions/ErrorResponse"
                         }
                     },
                     "401": {
-                        "description": "Unauthorized",
+                        "description": "Missing or invalid token (text/plain)",
                         "schema": {
-                            "$ref": "#/definitions/utils.ErrorResponse"
+                            "$ref": "#/definitions/UnauthorizedResponse"
                         }
                     },
                     "404": {
-                        "description": "Not Found",
+                        "description": "user not found",
                         "schema": {
-                            "$ref": "#/definitions/utils.ErrorResponse"
+                            "$ref": "#/definitions/ErrorResponse"
+                        }
+                    },
+                    "429": {
+                        "description": "Rate limit exceeded (text/plain)",
+                        "schema": {
+                            "$ref": "#/definitions/TooManyRequestsResponse"
                         }
                     },
                     "500": {
                         "description": "Internal Server Error",
                         "schema": {
-                            "$ref": "#/definitions/utils.ErrorResponse"
+                            "$ref": "#/definitions/InternalErrorResponse"
                         }
                     }
                 }
@@ -220,6 +267,7 @@ const docTemplate = `{
                         "BearerAuth": []
                     }
                 ],
+                "description": "Once accepted, the guest sees the task and appears among its assignees. An expired invitation can no longer be accepted (410); its author may resend it. Only pending invitations can be answered (404 otherwise). 409 if the caller is already a guest of the task, or has joined the task's organisation since the invitation was sent.",
                 "consumes": [
                     "application/json"
                 ],
@@ -256,34 +304,121 @@ const docTemplate = `{
                         }
                     },
                     "400": {
-                        "description": "Bad Request",
+                        "description": "invalid id | could not read body | could not decode body | errors: {field: message} (validation)",
                         "schema": {
-                            "$ref": "#/definitions/utils.ErrorResponse"
+                            "$ref": "#/definitions/BadRequestResponse"
                         }
                     },
                     "401": {
-                        "description": "Unauthorized",
+                        "description": "Missing or invalid token (text/plain)",
                         "schema": {
-                            "$ref": "#/definitions/utils.ErrorResponse"
+                            "$ref": "#/definitions/UnauthorizedResponse"
                         }
                     },
                     "404": {
-                        "description": "Not Found",
+                        "description": "user not found | invitation not found",
                         "schema": {
-                            "$ref": "#/definitions/utils.ErrorResponse"
+                            "$ref": "#/definitions/ErrorResponse"
                         }
                     },
-                    "422": {
-                        "description": "Unprocessable Entity",
+                    "409": {
+                        "description": "you already have access to this task",
                         "schema": {
-                            "type": "object",
-                            "additionalProperties": true
+                            "$ref": "#/definitions/ErrorResponse"
+                        }
+                    },
+                    "410": {
+                        "description": "invitation expired",
+                        "schema": {
+                            "$ref": "#/definitions/ErrorResponse"
+                        }
+                    },
+                    "415": {
+                        "description": "Unsupported Media Type",
+                        "schema": {
+                            "$ref": "#/definitions/UnsupportedMediaTypeResponse"
+                        }
+                    },
+                    "429": {
+                        "description": "Rate limit exceeded (text/plain)",
+                        "schema": {
+                            "$ref": "#/definitions/TooManyRequestsResponse"
                         }
                     },
                     "500": {
                         "description": "Internal Server Error",
                         "schema": {
-                            "$ref": "#/definitions/utils.ErrorResponse"
+                            "$ref": "#/definitions/InternalErrorResponse"
+                        }
+                    }
+                }
+            }
+        },
+        "/guest-invitations/{id}/resend": {
+            "post": {
+                "security": [
+                    {
+                        "BearerAuth": []
+                    }
+                ],
+                "description": "Sends the invitation email again and gives the invitation 7 more days from now, expired or not. Allowed for the author of the invitation only, as long as they may still invite guests on the workspace.",
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "task"
+                ],
+                "summary": "Resend a task guest invitation",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "Invitation ID",
+                        "name": "id",
+                        "in": "path",
+                        "required": true
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/utils.UpdateResponse"
+                        }
+                    },
+                    "400": {
+                        "description": "invalid id",
+                        "schema": {
+                            "$ref": "#/definitions/ErrorResponse"
+                        }
+                    },
+                    "401": {
+                        "description": "Missing or invalid token (text/plain)",
+                        "schema": {
+                            "$ref": "#/definitions/UnauthorizedResponse"
+                        }
+                    },
+                    "403": {
+                        "description": "organisation owner or admin required",
+                        "schema": {
+                            "$ref": "#/definitions/ErrorResponse"
+                        }
+                    },
+                    "404": {
+                        "description": "invitation not found",
+                        "schema": {
+                            "$ref": "#/definitions/ErrorResponse"
+                        }
+                    },
+                    "429": {
+                        "description": "Rate limit exceeded (text/plain)",
+                        "schema": {
+                            "$ref": "#/definitions/TooManyRequestsResponse"
+                        }
+                    },
+                    "500": {
+                        "description": "Internal Server Error",
+                        "schema": {
+                            "$ref": "#/definitions/InternalErrorResponse"
                         }
                     }
                 }
@@ -311,21 +446,27 @@ const docTemplate = `{
                         }
                     },
                     "401": {
-                        "description": "Unauthorized",
+                        "description": "Missing or invalid token (text/plain)",
                         "schema": {
-                            "$ref": "#/definitions/utils.ErrorResponse"
+                            "$ref": "#/definitions/UnauthorizedResponse"
                         }
                     },
                     "404": {
-                        "description": "Not Found",
+                        "description": "user not found",
                         "schema": {
-                            "$ref": "#/definitions/utils.ErrorResponse"
+                            "$ref": "#/definitions/ErrorResponse"
+                        }
+                    },
+                    "429": {
+                        "description": "Rate limit exceeded (text/plain)",
+                        "schema": {
+                            "$ref": "#/definitions/TooManyRequestsResponse"
                         }
                     },
                     "500": {
                         "description": "Internal Server Error",
                         "schema": {
-                            "$ref": "#/definitions/utils.ErrorResponse"
+                            "$ref": "#/definitions/InternalErrorResponse"
                         }
                     }
                 }
@@ -365,34 +506,39 @@ const docTemplate = `{
                         }
                     },
                     "400": {
-                        "description": "Bad Request",
+                        "description": "could not read body | could not decode body | errors: {field: message} (validation)",
                         "schema": {
-                            "$ref": "#/definitions/utils.ErrorResponse"
+                            "$ref": "#/definitions/BadRequestResponse"
                         }
                     },
                     "401": {
-                        "description": "Unauthorized",
+                        "description": "Missing or invalid token (text/plain)",
                         "schema": {
-                            "$ref": "#/definitions/utils.ErrorResponse"
+                            "$ref": "#/definitions/UnauthorizedResponse"
                         }
                     },
                     "404": {
-                        "description": "Not Found",
+                        "description": "user not found",
                         "schema": {
-                            "$ref": "#/definitions/utils.ErrorResponse"
+                            "$ref": "#/definitions/ErrorResponse"
                         }
                     },
-                    "422": {
-                        "description": "Unprocessable Entity",
+                    "415": {
+                        "description": "Unsupported Media Type",
                         "schema": {
-                            "type": "object",
-                            "additionalProperties": true
+                            "$ref": "#/definitions/UnsupportedMediaTypeResponse"
+                        }
+                    },
+                    "429": {
+                        "description": "Rate limit exceeded (text/plain)",
+                        "schema": {
+                            "$ref": "#/definitions/TooManyRequestsResponse"
                         }
                     },
                     "500": {
                         "description": "Internal Server Error",
                         "schema": {
-                            "$ref": "#/definitions/utils.ErrorResponse"
+                            "$ref": "#/definitions/InternalErrorResponse"
                         }
                     }
                 }
@@ -433,33 +579,39 @@ const docTemplate = `{
                         }
                     },
                     "400": {
-                        "description": "Bad Request",
+                        "description": "missing file | invalid image",
                         "schema": {
-                            "$ref": "#/definitions/utils.ErrorResponse"
+                            "$ref": "#/definitions/ErrorResponse"
                         }
                     },
                     "401": {
-                        "description": "Unauthorized",
+                        "description": "Missing or invalid token (text/plain)",
                         "schema": {
-                            "$ref": "#/definitions/utils.ErrorResponse"
+                            "$ref": "#/definitions/UnauthorizedResponse"
                         }
                     },
                     "404": {
-                        "description": "Not Found",
+                        "description": "user not found",
                         "schema": {
-                            "$ref": "#/definitions/utils.ErrorResponse"
+                            "$ref": "#/definitions/ErrorResponse"
+                        }
+                    },
+                    "429": {
+                        "description": "Rate limit exceeded (text/plain)",
+                        "schema": {
+                            "$ref": "#/definitions/TooManyRequestsResponse"
                         }
                     },
                     "500": {
                         "description": "Internal Server Error",
                         "schema": {
-                            "$ref": "#/definitions/utils.ErrorResponse"
+                            "$ref": "#/definitions/InternalErrorResponse"
                         }
                     },
                     "503": {
-                        "description": "Service Unavailable",
+                        "description": "avatar storage unavailable",
                         "schema": {
-                            "$ref": "#/definitions/utils.ErrorResponse"
+                            "$ref": "#/definitions/ErrorResponse"
                         }
                     }
                 }
@@ -479,33 +631,39 @@ const docTemplate = `{
                         "description": "No Content"
                     },
                     "401": {
-                        "description": "Unauthorized",
+                        "description": "Missing or invalid token (text/plain)",
                         "schema": {
-                            "$ref": "#/definitions/utils.ErrorResponse"
+                            "$ref": "#/definitions/UnauthorizedResponse"
                         }
                     },
                     "404": {
-                        "description": "Not Found",
+                        "description": "user not found",
                         "schema": {
-                            "$ref": "#/definitions/utils.ErrorResponse"
+                            "$ref": "#/definitions/ErrorResponse"
+                        }
+                    },
+                    "429": {
+                        "description": "Rate limit exceeded (text/plain)",
+                        "schema": {
+                            "$ref": "#/definitions/TooManyRequestsResponse"
                         }
                     },
                     "500": {
                         "description": "Internal Server Error",
                         "schema": {
-                            "$ref": "#/definitions/utils.ErrorResponse"
+                            "$ref": "#/definitions/InternalErrorResponse"
                         }
                     },
                     "503": {
-                        "description": "Service Unavailable",
+                        "description": "avatar storage unavailable",
                         "schema": {
-                            "$ref": "#/definitions/utils.ErrorResponse"
+                            "$ref": "#/definitions/ErrorResponse"
                         }
                     }
                 }
             }
         },
-        "/organisation": {
+        "/organisation-invitations/received": {
             "get": {
                 "security": [
                     {
@@ -518,125 +676,7 @@ const docTemplate = `{
                 "tags": [
                     "organisation"
                 ],
-                "summary": "Get the current user's organisation",
-                "responses": {
-                    "200": {
-                        "description": "OK",
-                        "schema": {
-                            "$ref": "#/definitions/handler.organisationResponse"
-                        }
-                    },
-                    "401": {
-                        "description": "Unauthorized",
-                        "schema": {
-                            "$ref": "#/definitions/utils.ErrorResponse"
-                        }
-                    },
-                    "404": {
-                        "description": "Not Found",
-                        "schema": {
-                            "$ref": "#/definitions/utils.ErrorResponse"
-                        }
-                    },
-                    "500": {
-                        "description": "Internal Server Error",
-                        "schema": {
-                            "$ref": "#/definitions/utils.ErrorResponse"
-                        }
-                    }
-                }
-            }
-        },
-        "/organisation/invitations": {
-            "post": {
-                "security": [
-                    {
-                        "BearerAuth": []
-                    }
-                ],
-                "description": "Sends an organisation-level invitation by email.",
-                "consumes": [
-                    "application/json"
-                ],
-                "produces": [
-                    "application/json"
-                ],
-                "tags": [
-                    "organization"
-                ],
-                "summary": "Invite a member",
-                "parameters": [
-                    {
-                        "description": "Invitation to create",
-                        "name": "body",
-                        "in": "body",
-                        "required": true,
-                        "schema": {
-                            "$ref": "#/definitions/handler.inviteBody"
-                        }
-                    }
-                ],
-                "responses": {
-                    "201": {
-                        "description": "Created",
-                        "schema": {
-                            "$ref": "#/definitions/utils.CreateResponse"
-                        }
-                    },
-                    "400": {
-                        "description": "Bad Request",
-                        "schema": {
-                            "$ref": "#/definitions/utils.ErrorResponse"
-                        }
-                    },
-                    "401": {
-                        "description": "Unauthorized",
-                        "schema": {
-                            "$ref": "#/definitions/utils.ErrorResponse"
-                        }
-                    },
-                    "404": {
-                        "description": "Not Found",
-                        "schema": {
-                            "$ref": "#/definitions/utils.ErrorResponse"
-                        }
-                    },
-                    "409": {
-                        "description": "Conflict",
-                        "schema": {
-                            "$ref": "#/definitions/utils.ErrorResponse"
-                        }
-                    },
-                    "422": {
-                        "description": "Unprocessable Entity",
-                        "schema": {
-                            "type": "object",
-                            "additionalProperties": true
-                        }
-                    },
-                    "500": {
-                        "description": "Internal Server Error",
-                        "schema": {
-                            "$ref": "#/definitions/utils.ErrorResponse"
-                        }
-                    }
-                }
-            }
-        },
-        "/organisation/invitations/received": {
-            "get": {
-                "security": [
-                    {
-                        "BearerAuth": []
-                    }
-                ],
-                "produces": [
-                    "application/json"
-                ],
-                "tags": [
-                    "organisation"
-                ],
-                "summary": "List invitations received by the current user",
+                "summary": "List organisation invitations received by the current user",
                 "parameters": [
                     {
                         "type": "integer",
@@ -662,104 +702,46 @@ const docTemplate = `{
                         }
                     },
                     "400": {
-                        "description": "Bad Request",
+                        "description": "invalid limit | invalid offset",
                         "schema": {
-                            "$ref": "#/definitions/utils.ErrorResponse"
+                            "$ref": "#/definitions/ErrorResponse"
                         }
                     },
                     "401": {
-                        "description": "Unauthorized",
+                        "description": "Missing or invalid token (text/plain)",
                         "schema": {
-                            "$ref": "#/definitions/utils.ErrorResponse"
+                            "$ref": "#/definitions/UnauthorizedResponse"
                         }
                     },
                     "404": {
-                        "description": "Not Found",
+                        "description": "user not found",
                         "schema": {
-                            "$ref": "#/definitions/utils.ErrorResponse"
+                            "$ref": "#/definitions/ErrorResponse"
+                        }
+                    },
+                    "429": {
+                        "description": "Rate limit exceeded (text/plain)",
+                        "schema": {
+                            "$ref": "#/definitions/TooManyRequestsResponse"
                         }
                     },
                     "500": {
                         "description": "Internal Server Error",
                         "schema": {
-                            "$ref": "#/definitions/utils.ErrorResponse"
+                            "$ref": "#/definitions/InternalErrorResponse"
                         }
                     }
                 }
             }
         },
-        "/organisation/invitations/sent": {
-            "get": {
-                "security": [
-                    {
-                        "BearerAuth": []
-                    }
-                ],
-                "produces": [
-                    "application/json"
-                ],
-                "tags": [
-                    "organisation"
-                ],
-                "summary": "List invitations sent by the organisation",
-                "parameters": [
-                    {
-                        "type": "integer",
-                        "description": "Page size (default 50, max 200)",
-                        "name": "limit",
-                        "in": "query"
-                    },
-                    {
-                        "type": "integer",
-                        "description": "Page offset (default 0)",
-                        "name": "offset",
-                        "in": "query"
-                    }
-                ],
-                "responses": {
-                    "200": {
-                        "description": "OK",
-                        "schema": {
-                            "type": "array",
-                            "items": {
-                                "$ref": "#/definitions/models.OrganisationInvitation"
-                            }
-                        }
-                    },
-                    "400": {
-                        "description": "Bad Request",
-                        "schema": {
-                            "$ref": "#/definitions/utils.ErrorResponse"
-                        }
-                    },
-                    "401": {
-                        "description": "Unauthorized",
-                        "schema": {
-                            "$ref": "#/definitions/utils.ErrorResponse"
-                        }
-                    },
-                    "404": {
-                        "description": "Not Found",
-                        "schema": {
-                            "$ref": "#/definitions/utils.ErrorResponse"
-                        }
-                    },
-                    "500": {
-                        "description": "Internal Server Error",
-                        "schema": {
-                            "$ref": "#/definitions/utils.ErrorResponse"
-                        }
-                    }
-                }
-            }
-        },
-        "/organisation/invitations/{id}": {
+        "/organisation-invitations/{id}": {
             "patch": {
                 "security": [
                     {
                         "BearerAuth": []
                     }
                 ],
+                "description": "Accepting makes the caller an admin or member of the organisation. Their guest accesses on tasks of that organisation are removed and replaced by access to the tasks' workspaces, with the guest role ('edit' if they had it on at least one task of the workspace).",
                 "consumes": [
                     "application/json"
                 ],
@@ -769,7 +751,7 @@ const docTemplate = `{
                 "tags": [
                     "organisation"
                 ],
-                "summary": "Accept or decline an invitation",
+                "summary": "Accept or decline an organisation invitation",
                 "parameters": [
                     {
                         "type": "string",
@@ -796,59 +778,670 @@ const docTemplate = `{
                         }
                     },
                     "400": {
-                        "description": "Bad Request",
+                        "description": "invalid id | could not read body | could not decode body | errors: {field: message} (validation)",
                         "schema": {
-                            "$ref": "#/definitions/utils.ErrorResponse"
+                            "$ref": "#/definitions/BadRequestResponse"
                         }
                     },
                     "401": {
-                        "description": "Unauthorized",
+                        "description": "Missing or invalid token (text/plain)",
                         "schema": {
-                            "$ref": "#/definitions/utils.ErrorResponse"
+                            "$ref": "#/definitions/UnauthorizedResponse"
                         }
                     },
                     "404": {
-                        "description": "Not Found",
+                        "description": "user not found | invitation not found",
                         "schema": {
-                            "$ref": "#/definitions/utils.ErrorResponse"
+                            "$ref": "#/definitions/ErrorResponse"
                         }
                     },
-                    "422": {
-                        "description": "Unprocessable Entity",
+                    "415": {
+                        "description": "Unsupported Media Type",
                         "schema": {
-                            "type": "object",
-                            "additionalProperties": true
+                            "$ref": "#/definitions/UnsupportedMediaTypeResponse"
+                        }
+                    },
+                    "429": {
+                        "description": "Rate limit exceeded (text/plain)",
+                        "schema": {
+                            "$ref": "#/definitions/TooManyRequestsResponse"
                         }
                     },
                     "500": {
                         "description": "Internal Server Error",
                         "schema": {
-                            "$ref": "#/definitions/utils.ErrorResponse"
+                            "$ref": "#/definitions/InternalErrorResponse"
                         }
                     }
                 }
             }
         },
-        "/organisation/members/{id}/profile": {
+        "/organisations": {
             "get": {
                 "security": [
                     {
                         "BearerAuth": []
                     }
                 ],
-                "description": "Returns the member's identity, organisation role, and, for every workspace of the organisation, whether it is visible to them ('private' by default, 'public') and their role there ('view' by default, 'edit'). The caller must belong to the same organisation as the target member.",
+                "description": "Returns the organisations the caller owns (first, at most one) or belongs to as admin or member, with their role in each.",
                 "produces": [
                     "application/json"
                 ],
                 "tags": [
                     "organisation"
                 ],
-                "summary": "Get a member's profile within the organisation",
+                "summary": "List the caller's organisations",
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "type": "array",
+                            "items": {
+                                "$ref": "#/definitions/models.OrganisationSummary"
+                            }
+                        }
+                    },
+                    "401": {
+                        "description": "Missing or invalid token (text/plain)",
+                        "schema": {
+                            "$ref": "#/definitions/UnauthorizedResponse"
+                        }
+                    },
+                    "429": {
+                        "description": "Rate limit exceeded (text/plain)",
+                        "schema": {
+                            "$ref": "#/definitions/TooManyRequestsResponse"
+                        }
+                    },
+                    "500": {
+                        "description": "Internal Server Error",
+                        "schema": {
+                            "$ref": "#/definitions/InternalErrorResponse"
+                        }
+                    }
+                }
+            }
+        },
+        "/organisations/{orgId}": {
+            "get": {
+                "security": [
+                    {
+                        "BearerAuth": []
+                    }
+                ],
+                "description": "Returns the organisation, the caller's role in it and its members, the owner first. Visible to every person of the organisation.",
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "organisation"
+                ],
+                "summary": "Get an organisation",
                 "parameters": [
                     {
                         "type": "string",
+                        "description": "Organisation ID",
+                        "name": "orgId",
+                        "in": "path",
+                        "required": true
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/handler.organisationResponse"
+                        }
+                    },
+                    "400": {
+                        "description": "invalid orgId",
+                        "schema": {
+                            "$ref": "#/definitions/ErrorResponse"
+                        }
+                    },
+                    "401": {
+                        "description": "Missing or invalid token (text/plain)",
+                        "schema": {
+                            "$ref": "#/definitions/UnauthorizedResponse"
+                        }
+                    },
+                    "404": {
+                        "description": "organisation not found",
+                        "schema": {
+                            "$ref": "#/definitions/ErrorResponse"
+                        }
+                    },
+                    "429": {
+                        "description": "Rate limit exceeded (text/plain)",
+                        "schema": {
+                            "$ref": "#/definitions/TooManyRequestsResponse"
+                        }
+                    },
+                    "500": {
+                        "description": "Internal Server Error",
+                        "schema": {
+                            "$ref": "#/definitions/InternalErrorResponse"
+                        }
+                    }
+                }
+            },
+            "delete": {
+                "security": [
+                    {
+                        "BearerAuth": []
+                    }
+                ],
+                "description": "Soft-deletes the organisation with all its workspaces, columns and tasks: nobody sees them anymore. The owner does not get a new organisation, so they can no longer create workspaces. Allowed for the organisation owner only.",
+                "tags": [
+                    "organisation"
+                ],
+                "summary": "Delete an organisation",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "Organisation ID",
+                        "name": "orgId",
+                        "in": "path",
+                        "required": true
+                    }
+                ],
+                "responses": {
+                    "204": {
+                        "description": "No Content"
+                    },
+                    "400": {
+                        "description": "invalid orgId",
+                        "schema": {
+                            "$ref": "#/definitions/ErrorResponse"
+                        }
+                    },
+                    "401": {
+                        "description": "Missing or invalid token (text/plain)",
+                        "schema": {
+                            "$ref": "#/definitions/UnauthorizedResponse"
+                        }
+                    },
+                    "403": {
+                        "description": "organisation owner required",
+                        "schema": {
+                            "$ref": "#/definitions/ErrorResponse"
+                        }
+                    },
+                    "404": {
+                        "description": "organisation not found",
+                        "schema": {
+                            "$ref": "#/definitions/ErrorResponse"
+                        }
+                    },
+                    "429": {
+                        "description": "Rate limit exceeded (text/plain)",
+                        "schema": {
+                            "$ref": "#/definitions/TooManyRequestsResponse"
+                        }
+                    },
+                    "500": {
+                        "description": "Internal Server Error",
+                        "schema": {
+                            "$ref": "#/definitions/InternalErrorResponse"
+                        }
+                    }
+                }
+            },
+            "patch": {
+                "security": [
+                    {
+                        "BearerAuth": []
+                    }
+                ],
+                "description": "Allowed for the organisation owner only.",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "organisation"
+                ],
+                "summary": "Rename an organisation",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "Organisation ID",
+                        "name": "orgId",
+                        "in": "path",
+                        "required": true
+                    },
+                    {
+                        "description": "New name",
+                        "name": "body",
+                        "in": "body",
+                        "required": true,
+                        "schema": {
+                            "$ref": "#/definitions/handler.updateOrganisationBody"
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/utils.UpdateResponse"
+                        }
+                    },
+                    "400": {
+                        "description": "invalid orgId | could not read body | could not decode body | errors: {field: message} (validation)",
+                        "schema": {
+                            "$ref": "#/definitions/BadRequestResponse"
+                        }
+                    },
+                    "401": {
+                        "description": "Missing or invalid token (text/plain)",
+                        "schema": {
+                            "$ref": "#/definitions/UnauthorizedResponse"
+                        }
+                    },
+                    "403": {
+                        "description": "organisation owner required",
+                        "schema": {
+                            "$ref": "#/definitions/ErrorResponse"
+                        }
+                    },
+                    "404": {
+                        "description": "organisation not found",
+                        "schema": {
+                            "$ref": "#/definitions/ErrorResponse"
+                        }
+                    },
+                    "415": {
+                        "description": "Unsupported Media Type",
+                        "schema": {
+                            "$ref": "#/definitions/UnsupportedMediaTypeResponse"
+                        }
+                    },
+                    "429": {
+                        "description": "Rate limit exceeded (text/plain)",
+                        "schema": {
+                            "$ref": "#/definitions/TooManyRequestsResponse"
+                        }
+                    },
+                    "500": {
+                        "description": "Internal Server Error",
+                        "schema": {
+                            "$ref": "#/definitions/InternalErrorResponse"
+                        }
+                    }
+                }
+            }
+        },
+        "/organisations/{orgId}/invitations": {
+            "get": {
+                "security": [
+                    {
+                        "BearerAuth": []
+                    }
+                ],
+                "description": "Allowed for the organisation owner only.",
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "organisation"
+                ],
+                "summary": "List the pending invitations of an organisation",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "Organisation ID",
+                        "name": "orgId",
+                        "in": "path",
+                        "required": true
+                    },
+                    {
+                        "type": "integer",
+                        "description": "Page size (default 50, max 200)",
+                        "name": "limit",
+                        "in": "query"
+                    },
+                    {
+                        "type": "integer",
+                        "description": "Page offset (default 0)",
+                        "name": "offset",
+                        "in": "query"
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "type": "array",
+                            "items": {
+                                "$ref": "#/definitions/models.OrganisationInvitation"
+                            }
+                        }
+                    },
+                    "400": {
+                        "description": "invalid orgId | invalid limit | invalid offset",
+                        "schema": {
+                            "$ref": "#/definitions/ErrorResponse"
+                        }
+                    },
+                    "401": {
+                        "description": "Missing or invalid token (text/plain)",
+                        "schema": {
+                            "$ref": "#/definitions/UnauthorizedResponse"
+                        }
+                    },
+                    "403": {
+                        "description": "organisation owner required",
+                        "schema": {
+                            "$ref": "#/definitions/ErrorResponse"
+                        }
+                    },
+                    "404": {
+                        "description": "organisation not found",
+                        "schema": {
+                            "$ref": "#/definitions/ErrorResponse"
+                        }
+                    },
+                    "429": {
+                        "description": "Rate limit exceeded (text/plain)",
+                        "schema": {
+                            "$ref": "#/definitions/TooManyRequestsResponse"
+                        }
+                    },
+                    "500": {
+                        "description": "Internal Server Error",
+                        "schema": {
+                            "$ref": "#/definitions/InternalErrorResponse"
+                        }
+                    }
+                }
+            },
+            "post": {
+                "security": [
+                    {
+                        "BearerAuth": []
+                    }
+                ],
+                "description": "Sends an organisation-level invitation by email. role is the organisation role granted on acceptance ('member' by default, or 'admin'). If the invitee is a guest on tasks of the organisation, accepting turns those guest accesses into access to the tasks' workspaces. Allowed for the organisation owner only.",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "organisation"
+                ],
+                "summary": "Invite someone into an organisation",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "Organisation ID",
+                        "name": "orgId",
+                        "in": "path",
+                        "required": true
+                    },
+                    {
+                        "description": "Invitation to create",
+                        "name": "body",
+                        "in": "body",
+                        "required": true,
+                        "schema": {
+                            "$ref": "#/definitions/handler.inviteBody"
+                        }
+                    }
+                ],
+                "responses": {
+                    "201": {
+                        "description": "Created",
+                        "schema": {
+                            "$ref": "#/definitions/utils.CreateResponse"
+                        }
+                    },
+                    "400": {
+                        "description": "invalid orgId | could not read body | could not decode body | errors: {field: message} (validation)",
+                        "schema": {
+                            "$ref": "#/definitions/BadRequestResponse"
+                        }
+                    },
+                    "401": {
+                        "description": "Missing or invalid token (text/plain)",
+                        "schema": {
+                            "$ref": "#/definitions/UnauthorizedResponse"
+                        }
+                    },
+                    "403": {
+                        "description": "organisation owner required",
+                        "schema": {
+                            "$ref": "#/definitions/ErrorResponse"
+                        }
+                    },
+                    "404": {
+                        "description": "organisation not found",
+                        "schema": {
+                            "$ref": "#/definitions/ErrorResponse"
+                        }
+                    },
+                    "409": {
+                        "description": "an invitation is already pending for this email | this user already belongs to the organisation",
+                        "schema": {
+                            "$ref": "#/definitions/ErrorResponse"
+                        }
+                    },
+                    "415": {
+                        "description": "Unsupported Media Type",
+                        "schema": {
+                            "$ref": "#/definitions/UnsupportedMediaTypeResponse"
+                        }
+                    },
+                    "429": {
+                        "description": "Rate limit exceeded (text/plain)",
+                        "schema": {
+                            "$ref": "#/definitions/TooManyRequestsResponse"
+                        }
+                    },
+                    "500": {
+                        "description": "Internal Server Error",
+                        "schema": {
+                            "$ref": "#/definitions/InternalErrorResponse"
+                        }
+                    }
+                }
+            }
+        },
+        "/organisations/{orgId}/members/{memberId}": {
+            "delete": {
+                "security": [
+                    {
+                        "BearerAuth": []
+                    }
+                ],
+                "description": "Removes an admin or member from the organisation, along with their access to its workspaces and their assignments on its tasks. Allowed for the organisation owner only, who cannot remove themselves.",
+                "tags": [
+                    "organisation"
+                ],
+                "summary": "Remove a member from an organisation",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "Organisation ID",
+                        "name": "orgId",
+                        "in": "path",
+                        "required": true
+                    },
+                    {
+                        "type": "string",
                         "description": "Member ID (user ID)",
-                        "name": "id",
+                        "name": "memberId",
+                        "in": "path",
+                        "required": true
+                    }
+                ],
+                "responses": {
+                    "204": {
+                        "description": "No Content"
+                    },
+                    "400": {
+                        "description": "invalid orgId | invalid memberId",
+                        "schema": {
+                            "$ref": "#/definitions/ErrorResponse"
+                        }
+                    },
+                    "401": {
+                        "description": "Missing or invalid token (text/plain)",
+                        "schema": {
+                            "$ref": "#/definitions/UnauthorizedResponse"
+                        }
+                    },
+                    "403": {
+                        "description": "organisation owner required | cannot remove yourself",
+                        "schema": {
+                            "$ref": "#/definitions/ErrorResponse"
+                        }
+                    },
+                    "404": {
+                        "description": "organisation not found | member not found",
+                        "schema": {
+                            "$ref": "#/definitions/ErrorResponse"
+                        }
+                    },
+                    "429": {
+                        "description": "Rate limit exceeded (text/plain)",
+                        "schema": {
+                            "$ref": "#/definitions/TooManyRequestsResponse"
+                        }
+                    },
+                    "500": {
+                        "description": "Internal Server Error",
+                        "schema": {
+                            "$ref": "#/definitions/InternalErrorResponse"
+                        }
+                    }
+                }
+            },
+            "patch": {
+                "security": [
+                    {
+                        "BearerAuth": []
+                    }
+                ],
+                "description": "Switches a member between 'admin' and 'member'. Allowed for the organisation owner only, who cannot change their own role.",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "organisation"
+                ],
+                "summary": "Change a member's organisation role",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "Organisation ID",
+                        "name": "orgId",
+                        "in": "path",
+                        "required": true
+                    },
+                    {
+                        "type": "string",
+                        "description": "Member ID (user ID)",
+                        "name": "memberId",
+                        "in": "path",
+                        "required": true
+                    },
+                    {
+                        "description": "New role",
+                        "name": "body",
+                        "in": "body",
+                        "required": true,
+                        "schema": {
+                            "$ref": "#/definitions/handler.setMemberRoleBody"
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/utils.UpdateResponse"
+                        }
+                    },
+                    "400": {
+                        "description": "invalid orgId | invalid memberId | could not read body | could not decode body | errors: {field: message} (validation)",
+                        "schema": {
+                            "$ref": "#/definitions/BadRequestResponse"
+                        }
+                    },
+                    "401": {
+                        "description": "Missing or invalid token (text/plain)",
+                        "schema": {
+                            "$ref": "#/definitions/UnauthorizedResponse"
+                        }
+                    },
+                    "403": {
+                        "description": "organisation owner required | cannot change your own role",
+                        "schema": {
+                            "$ref": "#/definitions/ErrorResponse"
+                        }
+                    },
+                    "404": {
+                        "description": "organisation not found | member not found",
+                        "schema": {
+                            "$ref": "#/definitions/ErrorResponse"
+                        }
+                    },
+                    "415": {
+                        "description": "Unsupported Media Type",
+                        "schema": {
+                            "$ref": "#/definitions/UnsupportedMediaTypeResponse"
+                        }
+                    },
+                    "429": {
+                        "description": "Rate limit exceeded (text/plain)",
+                        "schema": {
+                            "$ref": "#/definitions/TooManyRequestsResponse"
+                        }
+                    },
+                    "500": {
+                        "description": "Internal Server Error",
+                        "schema": {
+                            "$ref": "#/definitions/InternalErrorResponse"
+                        }
+                    }
+                }
+            }
+        },
+        "/organisations/{orgId}/members/{memberId}/profile": {
+            "get": {
+                "security": [
+                    {
+                        "BearerAuth": []
+                    }
+                ],
+                "description": "Returns the person's identity, organisation role ('owner', 'admin' or 'member') and, for each workspace, whether it is shared with them (visibility 'public', 'private' otherwise) and their role there ('view' by default, 'edit'). The owner gets every workspace of the organisation, an admin only the workspaces shared with them. Allowed for the owner and admins.",
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "organisation"
+                ],
+                "summary": "Get a member's profile within an organisation",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "Organisation ID",
+                        "name": "orgId",
+                        "in": "path",
+                        "required": true
+                    },
+                    {
+                        "type": "string",
+                        "description": "Member ID (user ID)",
+                        "name": "memberId",
                         "in": "path",
                         "required": true
                     }
@@ -861,27 +1454,39 @@ const docTemplate = `{
                         }
                     },
                     "400": {
-                        "description": "Bad Request",
+                        "description": "invalid orgId | invalid memberId",
                         "schema": {
-                            "$ref": "#/definitions/utils.ErrorResponse"
+                            "$ref": "#/definitions/ErrorResponse"
                         }
                     },
                     "401": {
-                        "description": "Unauthorized",
+                        "description": "Missing or invalid token (text/plain)",
                         "schema": {
-                            "$ref": "#/definitions/utils.ErrorResponse"
+                            "$ref": "#/definitions/UnauthorizedResponse"
+                        }
+                    },
+                    "403": {
+                        "description": "organisation owner or admin required",
+                        "schema": {
+                            "$ref": "#/definitions/ErrorResponse"
                         }
                     },
                     "404": {
-                        "description": "Not Found",
+                        "description": "organisation not found | member not found",
                         "schema": {
-                            "$ref": "#/definitions/utils.ErrorResponse"
+                            "$ref": "#/definitions/ErrorResponse"
+                        }
+                    },
+                    "429": {
+                        "description": "Rate limit exceeded (text/plain)",
+                        "schema": {
+                            "$ref": "#/definitions/TooManyRequestsResponse"
                         }
                     },
                     "500": {
                         "description": "Internal Server Error",
                         "schema": {
-                            "$ref": "#/definitions/utils.ErrorResponse"
+                            "$ref": "#/definitions/InternalErrorResponse"
                         }
                     }
                 }
@@ -894,7 +1499,7 @@ const docTemplate = `{
                         "BearerAuth": []
                     }
                 ],
-                "description": "Returns the caller's effective role ('edit' or 'view') at a given point in time. With no query params, returns their organisation role. With workspace_id set, returns their workspace role, optionally narrowed with task_id to the role that actually applies there — a task-specific assignment always wins over the organisation role.",
+                "description": "Returns the caller's effective role at a given point in time. With organisation_id set, returns their role in that organisation ('owner', 'admin' or 'member'; 404 if they do not belong to it). With workspace_id set, returns their workspace role: 'edit' if they may modify columns and tasks, 'view' otherwise (always 'view' for a guest). With task_id as well, returns their role on that task: the workspace role for a member, the invitation role for a guest ('edit' then only allows changing the description).",
                 "produces": [
                     "application/json"
                 ],
@@ -903,6 +1508,12 @@ const docTemplate = `{
                 ],
                 "summary": "Get the caller's effective role for a scope",
                 "parameters": [
+                    {
+                        "type": "string",
+                        "description": "Organisation ID (ignored when workspace_id is set)",
+                        "name": "organisation_id",
+                        "in": "query"
+                    },
                     {
                         "type": "string",
                         "description": "Workspace ID",
@@ -924,33 +1535,39 @@ const docTemplate = `{
                         }
                     },
                     "400": {
-                        "description": "Bad Request",
+                        "description": "organisation_id or workspace_id required | invalid organisation_id | invalid workspace_id | invalid task_id",
                         "schema": {
-                            "$ref": "#/definitions/utils.ErrorResponse"
+                            "$ref": "#/definitions/ErrorResponse"
                         }
                     },
                     "401": {
-                        "description": "Unauthorized",
+                        "description": "Missing or invalid token (text/plain)",
                         "schema": {
-                            "$ref": "#/definitions/utils.ErrorResponse"
+                            "$ref": "#/definitions/UnauthorizedResponse"
                         }
                     },
                     "403": {
-                        "description": "Forbidden",
+                        "description": "no access to this workspace | no access to this task",
                         "schema": {
-                            "$ref": "#/definitions/utils.ErrorResponse"
+                            "$ref": "#/definitions/ErrorResponse"
                         }
                     },
                     "404": {
-                        "description": "Not Found",
+                        "description": "organisation not found",
                         "schema": {
-                            "$ref": "#/definitions/utils.ErrorResponse"
+                            "$ref": "#/definitions/ErrorResponse"
+                        }
+                    },
+                    "429": {
+                        "description": "Rate limit exceeded (text/plain)",
+                        "schema": {
+                            "$ref": "#/definitions/TooManyRequestsResponse"
                         }
                     },
                     "500": {
                         "description": "Internal Server Error",
                         "schema": {
-                            "$ref": "#/definitions/utils.ErrorResponse"
+                            "$ref": "#/definitions/InternalErrorResponse"
                         }
                     }
                 }
@@ -995,21 +1612,27 @@ const docTemplate = `{
                         }
                     },
                     "400": {
-                        "description": "Bad Request",
+                        "description": "invalid limit | invalid offset",
                         "schema": {
-                            "$ref": "#/definitions/utils.ErrorResponse"
+                            "$ref": "#/definitions/ErrorResponse"
                         }
                     },
                     "401": {
-                        "description": "Unauthorized",
+                        "description": "Missing or invalid token (text/plain)",
                         "schema": {
-                            "$ref": "#/definitions/utils.ErrorResponse"
+                            "$ref": "#/definitions/UnauthorizedResponse"
+                        }
+                    },
+                    "429": {
+                        "description": "Rate limit exceeded (text/plain)",
+                        "schema": {
+                            "$ref": "#/definitions/TooManyRequestsResponse"
                         }
                     },
                     "500": {
                         "description": "Internal Server Error",
                         "schema": {
-                            "$ref": "#/definitions/utils.ErrorResponse"
+                            "$ref": "#/definitions/InternalErrorResponse"
                         }
                     }
                 }
@@ -1049,28 +1672,33 @@ const docTemplate = `{
                         }
                     },
                     "400": {
-                        "description": "Bad Request",
+                        "description": "could not read body | could not decode body | errors: {field: message} (validation)",
                         "schema": {
-                            "$ref": "#/definitions/utils.ErrorResponse"
+                            "$ref": "#/definitions/BadRequestResponse"
                         }
                     },
                     "401": {
-                        "description": "Unauthorized",
+                        "description": "Missing or invalid token (text/plain)",
                         "schema": {
-                            "$ref": "#/definitions/utils.ErrorResponse"
+                            "$ref": "#/definitions/UnauthorizedResponse"
                         }
                     },
-                    "422": {
-                        "description": "Unprocessable Entity",
+                    "415": {
+                        "description": "Unsupported Media Type",
                         "schema": {
-                            "type": "object",
-                            "additionalProperties": true
+                            "$ref": "#/definitions/UnsupportedMediaTypeResponse"
+                        }
+                    },
+                    "429": {
+                        "description": "Rate limit exceeded (text/plain)",
+                        "schema": {
+                            "$ref": "#/definitions/TooManyRequestsResponse"
                         }
                     },
                     "500": {
                         "description": "Internal Server Error",
                         "schema": {
-                            "$ref": "#/definitions/utils.ErrorResponse"
+                            "$ref": "#/definitions/InternalErrorResponse"
                         }
                     }
                 }
@@ -1119,34 +1747,39 @@ const docTemplate = `{
                         }
                     },
                     "400": {
-                        "description": "Bad Request",
+                        "description": "invalid id | could not read body | could not decode body | errors: {field: message} (validation)",
                         "schema": {
-                            "$ref": "#/definitions/utils.ErrorResponse"
+                            "$ref": "#/definitions/BadRequestResponse"
                         }
                     },
                     "401": {
-                        "description": "Unauthorized",
+                        "description": "Missing or invalid token (text/plain)",
                         "schema": {
-                            "$ref": "#/definitions/utils.ErrorResponse"
+                            "$ref": "#/definitions/UnauthorizedResponse"
                         }
                     },
                     "404": {
-                        "description": "Not Found",
+                        "description": "tag not found",
                         "schema": {
-                            "$ref": "#/definitions/utils.ErrorResponse"
+                            "$ref": "#/definitions/ErrorResponse"
                         }
                     },
-                    "422": {
-                        "description": "Unprocessable Entity",
+                    "415": {
+                        "description": "Unsupported Media Type",
                         "schema": {
-                            "type": "object",
-                            "additionalProperties": true
+                            "$ref": "#/definitions/UnsupportedMediaTypeResponse"
+                        }
+                    },
+                    "429": {
+                        "description": "Rate limit exceeded (text/plain)",
+                        "schema": {
+                            "$ref": "#/definitions/TooManyRequestsResponse"
                         }
                     },
                     "500": {
                         "description": "Internal Server Error",
                         "schema": {
-                            "$ref": "#/definitions/utils.ErrorResponse"
+                            "$ref": "#/definitions/InternalErrorResponse"
                         }
                     }
                 }
@@ -1175,8 +1808,12 @@ const docTemplate = `{
                         "in": "query"
                     },
                     {
+                        "enum": [
+                            "names",
+                            "recent"
+                        ],
                         "type": "string",
-                        "description": "names or recent. 'names' returns []models.WorkspaceName, 'recent' returns []models.Workspace unpaginated. Ignored if q is set.",
+                        "description": "'names' returns []models.WorkspaceName, 'recent' returns []models.Workspace unpaginated. Ignored if q is set.",
                         "name": "view",
                         "in": "query"
                     },
@@ -1204,21 +1841,27 @@ const docTemplate = `{
                         }
                     },
                     "400": {
-                        "description": "Bad Request",
+                        "description": "invalid limit | invalid offset | invalid q",
                         "schema": {
-                            "$ref": "#/definitions/utils.ErrorResponse"
+                            "$ref": "#/definitions/ErrorResponse"
                         }
                     },
                     "401": {
-                        "description": "Unauthorized",
+                        "description": "Missing or invalid token (text/plain)",
                         "schema": {
-                            "$ref": "#/definitions/utils.ErrorResponse"
+                            "$ref": "#/definitions/UnauthorizedResponse"
+                        }
+                    },
+                    "429": {
+                        "description": "Rate limit exceeded (text/plain)",
+                        "schema": {
+                            "$ref": "#/definitions/TooManyRequestsResponse"
                         }
                     },
                     "500": {
                         "description": "Internal Server Error",
                         "schema": {
-                            "$ref": "#/definitions/utils.ErrorResponse"
+                            "$ref": "#/definitions/InternalErrorResponse"
                         }
                     }
                 }
@@ -1229,6 +1872,7 @@ const docTemplate = `{
                         "BearerAuth": []
                     }
                 ],
+                "description": "Creates a private workspace in the organisation the caller owns. Only an organisation owner may create one (403 for a user who owns no organisation, e.g. after deleting it).",
                 "consumes": [
                     "application/json"
                 ],
@@ -1258,28 +1902,39 @@ const docTemplate = `{
                         }
                     },
                     "400": {
-                        "description": "Bad Request",
+                        "description": "could not read body | could not decode body | errors: {field: message} (validation)",
                         "schema": {
-                            "$ref": "#/definitions/utils.ErrorResponse"
+                            "$ref": "#/definitions/BadRequestResponse"
                         }
                     },
                     "401": {
-                        "description": "Unauthorized",
+                        "description": "Missing or invalid token (text/plain)",
                         "schema": {
-                            "$ref": "#/definitions/utils.ErrorResponse"
+                            "$ref": "#/definitions/UnauthorizedResponse"
                         }
                     },
-                    "422": {
-                        "description": "Unprocessable Entity",
+                    "403": {
+                        "description": "organisation owner required",
                         "schema": {
-                            "type": "object",
-                            "additionalProperties": true
+                            "$ref": "#/definitions/ErrorResponse"
+                        }
+                    },
+                    "415": {
+                        "description": "Unsupported Media Type",
+                        "schema": {
+                            "$ref": "#/definitions/UnsupportedMediaTypeResponse"
+                        }
+                    },
+                    "429": {
+                        "description": "Rate limit exceeded (text/plain)",
+                        "schema": {
+                            "$ref": "#/definitions/TooManyRequestsResponse"
                         }
                     },
                     "500": {
                         "description": "Internal Server Error",
                         "schema": {
-                            "$ref": "#/definitions/utils.ErrorResponse"
+                            "$ref": "#/definitions/InternalErrorResponse"
                         }
                     }
                 }
@@ -1292,7 +1947,7 @@ const docTemplate = `{
                         "BearerAuth": []
                     }
                 ],
-                "description": "Get a workspace's full detail (columns and tasks included).",
+                "description": "Get a workspace's full detail (columns and tasks included). A guest only gets the tasks shared with them (and their columns), and no members.",
                 "produces": [
                     "application/json"
                 ],
@@ -1317,27 +1972,33 @@ const docTemplate = `{
                         }
                     },
                     "400": {
-                        "description": "Bad Request",
+                        "description": "invalid id",
                         "schema": {
-                            "$ref": "#/definitions/utils.ErrorResponse"
+                            "$ref": "#/definitions/ErrorResponse"
                         }
                     },
                     "401": {
-                        "description": "Unauthorized",
+                        "description": "Missing or invalid token (text/plain)",
                         "schema": {
-                            "$ref": "#/definitions/utils.ErrorResponse"
+                            "$ref": "#/definitions/UnauthorizedResponse"
                         }
                     },
                     "404": {
-                        "description": "Not Found",
+                        "description": "workspace not found",
                         "schema": {
-                            "$ref": "#/definitions/utils.ErrorResponse"
+                            "$ref": "#/definitions/ErrorResponse"
+                        }
+                    },
+                    "429": {
+                        "description": "Rate limit exceeded (text/plain)",
+                        "schema": {
+                            "$ref": "#/definitions/TooManyRequestsResponse"
                         }
                     },
                     "500": {
                         "description": "Internal Server Error",
                         "schema": {
-                            "$ref": "#/definitions/utils.ErrorResponse"
+                            "$ref": "#/definitions/InternalErrorResponse"
                         }
                     }
                 }
@@ -1348,7 +2009,7 @@ const docTemplate = `{
                         "BearerAuth": []
                     }
                 ],
-                "description": "Soft-deletes a workspace.",
+                "description": "Soft-deletes a workspace, along with its columns and tasks. Only the organisation owner may call this (403 for other users who see the workspace, 404 \"workspace not found\" for the others).",
                 "tags": [
                     "workspace"
                 ],
@@ -1367,27 +2028,39 @@ const docTemplate = `{
                         "description": "No Content"
                     },
                     "400": {
-                        "description": "Bad Request",
+                        "description": "invalid id",
                         "schema": {
-                            "$ref": "#/definitions/utils.ErrorResponse"
+                            "$ref": "#/definitions/ErrorResponse"
                         }
                     },
                     "401": {
-                        "description": "Unauthorized",
+                        "description": "Missing or invalid token (text/plain)",
                         "schema": {
-                            "$ref": "#/definitions/utils.ErrorResponse"
+                            "$ref": "#/definitions/UnauthorizedResponse"
+                        }
+                    },
+                    "403": {
+                        "description": "organisation owner required",
+                        "schema": {
+                            "$ref": "#/definitions/ErrorResponse"
                         }
                     },
                     "404": {
-                        "description": "Not Found",
+                        "description": "workspace not found",
                         "schema": {
-                            "$ref": "#/definitions/utils.ErrorResponse"
+                            "$ref": "#/definitions/ErrorResponse"
+                        }
+                    },
+                    "429": {
+                        "description": "Rate limit exceeded (text/plain)",
+                        "schema": {
+                            "$ref": "#/definitions/TooManyRequestsResponse"
                         }
                     },
                     "500": {
                         "description": "Internal Server Error",
                         "schema": {
-                            "$ref": "#/definitions/utils.ErrorResponse"
+                            "$ref": "#/definitions/InternalErrorResponse"
                         }
                     }
                 }
@@ -1398,6 +2071,7 @@ const docTemplate = `{
                         "BearerAuth": []
                     }
                 ],
+                "description": "Updates name/description and, in the same transaction, the access of each listed member on this workspace: visibility ('private' removes the member's access, 'public' grants it) and/or role ('view' or 'edit'). For each member, an omitted field keeps its current value, or its default ('private' / 'view') if the member had no access yet: to add a member, send visibility 'public'. Allowed for the organisation owner, or an admin the workspace is shared with (403 for other users who see the workspace, 404 \"workspace not found\" for the others). An admin only manages members, never another admin or the owner; nobody changes their own access (403). Every listed member must belong to the organisation (404 otherwise). Nothing is changed when a check fails.",
                 "consumes": [
                     "application/json"
                 ],
@@ -1434,34 +2108,45 @@ const docTemplate = `{
                         }
                     },
                     "400": {
-                        "description": "Bad Request",
+                        "description": "invalid id | could not read body | could not decode body | errors: {field: message} (validation)",
                         "schema": {
-                            "$ref": "#/definitions/utils.ErrorResponse"
+                            "$ref": "#/definitions/BadRequestResponse"
                         }
                     },
                     "401": {
-                        "description": "Unauthorized",
+                        "description": "Missing or invalid token (text/plain)",
                         "schema": {
-                            "$ref": "#/definitions/utils.ErrorResponse"
+                            "$ref": "#/definitions/UnauthorizedResponse"
+                        }
+                    },
+                    "403": {
+                        "description": "organisation owner or admin required | cannot change your own access | cannot manage this member's access",
+                        "schema": {
+                            "$ref": "#/definitions/ErrorResponse"
                         }
                     },
                     "404": {
-                        "description": "Not Found",
+                        "description": "workspace not found | member not found in this organisation",
                         "schema": {
-                            "$ref": "#/definitions/utils.ErrorResponse"
+                            "$ref": "#/definitions/ErrorResponse"
                         }
                     },
-                    "422": {
-                        "description": "Unprocessable Entity",
+                    "415": {
+                        "description": "Unsupported Media Type",
                         "schema": {
-                            "type": "object",
-                            "additionalProperties": true
+                            "$ref": "#/definitions/UnsupportedMediaTypeResponse"
+                        }
+                    },
+                    "429": {
+                        "description": "Rate limit exceeded (text/plain)",
+                        "schema": {
+                            "$ref": "#/definitions/TooManyRequestsResponse"
                         }
                     },
                     "500": {
                         "description": "Internal Server Error",
                         "schema": {
-                            "$ref": "#/definitions/utils.ErrorResponse"
+                            "$ref": "#/definitions/InternalErrorResponse"
                         }
                     }
                 }
@@ -1474,7 +2159,7 @@ const docTemplate = `{
                         "BearerAuth": []
                     }
                 ],
-                "description": "Returns the caller's permissions on the workspace as a list of CASL rules (action/subject/conditions), consumable directly by @casl/ability's createMongoAbility(rules) on the Angular side. Covers the Workspace, Column and Task subjects, including per-task overrides from task assignments.",
+                "description": "Returns the caller's permissions on the workspace as a list of CASL rules (action/subject/fields/conditions), consumable directly by @casl/ability's createMongoAbility(rules) on the Angular side. Actions: read, create, update, delete on Workspace, Column and Task, plus share (manage the members' access) on Workspace, and assign and invite (guests) on Task. A guest gets read on the Workspace and on each task shared with them, and update restricted to the description field on the tasks they were invited to with 'edit'.",
                 "produces": [
                     "application/json"
                 ],
@@ -1502,33 +2187,33 @@ const docTemplate = `{
                         }
                     },
                     "400": {
-                        "description": "Bad Request",
+                        "description": "invalid id",
                         "schema": {
-                            "$ref": "#/definitions/utils.ErrorResponse"
+                            "$ref": "#/definitions/ErrorResponse"
                         }
                     },
                     "401": {
-                        "description": "Unauthorized",
+                        "description": "Missing or invalid token (text/plain)",
                         "schema": {
-                            "$ref": "#/definitions/utils.ErrorResponse"
-                        }
-                    },
-                    "403": {
-                        "description": "Forbidden",
-                        "schema": {
-                            "$ref": "#/definitions/utils.ErrorResponse"
+                            "$ref": "#/definitions/UnauthorizedResponse"
                         }
                     },
                     "404": {
-                        "description": "Not Found",
+                        "description": "workspace not found",
                         "schema": {
-                            "$ref": "#/definitions/utils.ErrorResponse"
+                            "$ref": "#/definitions/ErrorResponse"
+                        }
+                    },
+                    "429": {
+                        "description": "Rate limit exceeded (text/plain)",
+                        "schema": {
+                            "$ref": "#/definitions/TooManyRequestsResponse"
                         }
                     },
                     "500": {
                         "description": "Internal Server Error",
                         "schema": {
-                            "$ref": "#/definitions/utils.ErrorResponse"
+                            "$ref": "#/definitions/InternalErrorResponse"
                         }
                     }
                 }
@@ -1577,34 +2262,45 @@ const docTemplate = `{
                         }
                     },
                     "400": {
-                        "description": "Bad Request",
+                        "description": "invalid id | could not read body | could not decode body | errors: {field: message} (validation)",
                         "schema": {
-                            "$ref": "#/definitions/utils.ErrorResponse"
+                            "$ref": "#/definitions/BadRequestResponse"
                         }
                     },
                     "401": {
-                        "description": "Unauthorized",
+                        "description": "Missing or invalid token (text/plain)",
                         "schema": {
-                            "$ref": "#/definitions/utils.ErrorResponse"
+                            "$ref": "#/definitions/UnauthorizedResponse"
+                        }
+                    },
+                    "403": {
+                        "description": "organisation owner or admin required",
+                        "schema": {
+                            "$ref": "#/definitions/ErrorResponse"
                         }
                     },
                     "404": {
-                        "description": "Not Found",
+                        "description": "workspace not found",
                         "schema": {
-                            "$ref": "#/definitions/utils.ErrorResponse"
+                            "$ref": "#/definitions/ErrorResponse"
                         }
                     },
-                    "422": {
-                        "description": "Unprocessable Entity",
+                    "415": {
+                        "description": "Unsupported Media Type",
                         "schema": {
-                            "type": "object",
-                            "additionalProperties": true
+                            "$ref": "#/definitions/UnsupportedMediaTypeResponse"
+                        }
+                    },
+                    "429": {
+                        "description": "Rate limit exceeded (text/plain)",
+                        "schema": {
+                            "$ref": "#/definitions/TooManyRequestsResponse"
                         }
                     },
                     "500": {
                         "description": "Internal Server Error",
                         "schema": {
-                            "$ref": "#/definitions/utils.ErrorResponse"
+                            "$ref": "#/definitions/InternalErrorResponse"
                         }
                     }
                 }
@@ -1644,27 +2340,39 @@ const docTemplate = `{
                         }
                     },
                     "400": {
-                        "description": "Bad Request",
+                        "description": "invalid id",
                         "schema": {
-                            "$ref": "#/definitions/utils.ErrorResponse"
+                            "$ref": "#/definitions/ErrorResponse"
                         }
                     },
                     "401": {
-                        "description": "Unauthorized",
+                        "description": "Missing or invalid token (text/plain)",
                         "schema": {
-                            "$ref": "#/definitions/utils.ErrorResponse"
+                            "$ref": "#/definitions/UnauthorizedResponse"
+                        }
+                    },
+                    "403": {
+                        "description": "guest access is limited to shared tasks",
+                        "schema": {
+                            "$ref": "#/definitions/ErrorResponse"
                         }
                     },
                     "404": {
-                        "description": "Not Found",
+                        "description": "workspace not found",
                         "schema": {
-                            "$ref": "#/definitions/utils.ErrorResponse"
+                            "$ref": "#/definitions/ErrorResponse"
+                        }
+                    },
+                    "429": {
+                        "description": "Rate limit exceeded (text/plain)",
+                        "schema": {
+                            "$ref": "#/definitions/TooManyRequestsResponse"
                         }
                     },
                     "500": {
                         "description": "Internal Server Error",
                         "schema": {
-                            "$ref": "#/definitions/utils.ErrorResponse"
+                            "$ref": "#/definitions/InternalErrorResponse"
                         }
                     }
                 }
@@ -1703,27 +2411,39 @@ const docTemplate = `{
                         "description": "No Content"
                     },
                     "400": {
-                        "description": "Bad Request",
+                        "description": "invalid id | invalid columnId",
                         "schema": {
-                            "$ref": "#/definitions/utils.ErrorResponse"
+                            "$ref": "#/definitions/ErrorResponse"
                         }
                     },
                     "401": {
-                        "description": "Unauthorized",
+                        "description": "Missing or invalid token (text/plain)",
                         "schema": {
-                            "$ref": "#/definitions/utils.ErrorResponse"
+                            "$ref": "#/definitions/UnauthorizedResponse"
+                        }
+                    },
+                    "403": {
+                        "description": "organisation owner or admin required",
+                        "schema": {
+                            "$ref": "#/definitions/ErrorResponse"
                         }
                     },
                     "404": {
-                        "description": "Not Found",
+                        "description": "workspace not found | column not found",
                         "schema": {
-                            "$ref": "#/definitions/utils.ErrorResponse"
+                            "$ref": "#/definitions/ErrorResponse"
+                        }
+                    },
+                    "429": {
+                        "description": "Rate limit exceeded (text/plain)",
+                        "schema": {
+                            "$ref": "#/definitions/TooManyRequestsResponse"
                         }
                     },
                     "500": {
                         "description": "Internal Server Error",
                         "schema": {
-                            "$ref": "#/definitions/utils.ErrorResponse"
+                            "$ref": "#/definitions/InternalErrorResponse"
                         }
                     }
                 }
@@ -1777,34 +2497,45 @@ const docTemplate = `{
                         }
                     },
                     "400": {
-                        "description": "Bad Request",
+                        "description": "invalid id | invalid columnId | could not read body | could not decode body | errors: {field: message} (validation)",
                         "schema": {
-                            "$ref": "#/definitions/utils.ErrorResponse"
+                            "$ref": "#/definitions/BadRequestResponse"
                         }
                     },
                     "401": {
-                        "description": "Unauthorized",
+                        "description": "Missing or invalid token (text/plain)",
                         "schema": {
-                            "$ref": "#/definitions/utils.ErrorResponse"
+                            "$ref": "#/definitions/UnauthorizedResponse"
+                        }
+                    },
+                    "403": {
+                        "description": "edit access required",
+                        "schema": {
+                            "$ref": "#/definitions/ErrorResponse"
                         }
                     },
                     "404": {
-                        "description": "Not Found",
+                        "description": "workspace not found | column not found",
                         "schema": {
-                            "$ref": "#/definitions/utils.ErrorResponse"
+                            "$ref": "#/definitions/ErrorResponse"
                         }
                     },
-                    "422": {
-                        "description": "Unprocessable Entity",
+                    "415": {
+                        "description": "Unsupported Media Type",
                         "schema": {
-                            "type": "object",
-                            "additionalProperties": true
+                            "$ref": "#/definitions/UnsupportedMediaTypeResponse"
+                        }
+                    },
+                    "429": {
+                        "description": "Rate limit exceeded (text/plain)",
+                        "schema": {
+                            "$ref": "#/definitions/TooManyRequestsResponse"
                         }
                     },
                     "500": {
                         "description": "Internal Server Error",
                         "schema": {
-                            "$ref": "#/definitions/utils.ErrorResponse"
+                            "$ref": "#/definitions/InternalErrorResponse"
                         }
                     }
                 }
@@ -1860,34 +2591,51 @@ const docTemplate = `{
                         }
                     },
                     "400": {
-                        "description": "Bad Request",
+                        "description": "invalid id | invalid columnId | could not read body | could not decode body | errors: {field: message} (validation)",
                         "schema": {
-                            "$ref": "#/definitions/utils.ErrorResponse"
+                            "$ref": "#/definitions/BadRequestResponse"
                         }
                     },
                     "401": {
-                        "description": "Unauthorized",
+                        "description": "Missing or invalid token (text/plain)",
                         "schema": {
-                            "$ref": "#/definitions/utils.ErrorResponse"
+                            "$ref": "#/definitions/UnauthorizedResponse"
+                        }
+                    },
+                    "403": {
+                        "description": "organisation owner or admin required",
+                        "schema": {
+                            "$ref": "#/definitions/ErrorResponse"
                         }
                     },
                     "404": {
-                        "description": "Not Found",
+                        "description": "workspace not found | column not found | tag not found",
                         "schema": {
-                            "$ref": "#/definitions/utils.ErrorResponse"
+                            "$ref": "#/definitions/ErrorResponse"
+                        }
+                    },
+                    "415": {
+                        "description": "Unsupported Media Type",
+                        "schema": {
+                            "$ref": "#/definitions/UnsupportedMediaTypeResponse"
                         }
                     },
                     "422": {
-                        "description": "Unprocessable Entity",
+                        "description": "invalid status",
                         "schema": {
-                            "type": "object",
-                            "additionalProperties": true
+                            "$ref": "#/definitions/ErrorResponse"
+                        }
+                    },
+                    "429": {
+                        "description": "Rate limit exceeded (text/plain)",
+                        "schema": {
+                            "$ref": "#/definitions/TooManyRequestsResponse"
                         }
                     },
                     "500": {
                         "description": "Internal Server Error",
                         "schema": {
-                            "$ref": "#/definitions/utils.ErrorResponse"
+                            "$ref": "#/definitions/InternalErrorResponse"
                         }
                     }
                 }
@@ -1933,27 +2681,39 @@ const docTemplate = `{
                         "description": "No Content"
                     },
                     "400": {
-                        "description": "Bad Request",
+                        "description": "invalid id | invalid columnId | invalid taskId",
                         "schema": {
-                            "$ref": "#/definitions/utils.ErrorResponse"
+                            "$ref": "#/definitions/ErrorResponse"
                         }
                     },
                     "401": {
-                        "description": "Unauthorized",
+                        "description": "Missing or invalid token (text/plain)",
                         "schema": {
-                            "$ref": "#/definitions/utils.ErrorResponse"
+                            "$ref": "#/definitions/UnauthorizedResponse"
+                        }
+                    },
+                    "403": {
+                        "description": "organisation owner or admin required",
+                        "schema": {
+                            "$ref": "#/definitions/ErrorResponse"
                         }
                     },
                     "404": {
-                        "description": "Not Found",
+                        "description": "workspace not found | column not found | task not found",
                         "schema": {
-                            "$ref": "#/definitions/utils.ErrorResponse"
+                            "$ref": "#/definitions/ErrorResponse"
+                        }
+                    },
+                    "429": {
+                        "description": "Rate limit exceeded (text/plain)",
+                        "schema": {
+                            "$ref": "#/definitions/TooManyRequestsResponse"
                         }
                     },
                     "500": {
                         "description": "Internal Server Error",
                         "schema": {
-                            "$ref": "#/definitions/utils.ErrorResponse"
+                            "$ref": "#/definitions/InternalErrorResponse"
                         }
                     }
                 }
@@ -1964,6 +2724,7 @@ const docTemplate = `{
                         "BearerAuth": []
                     }
                 ],
+                "description": "Requires edit access on the workspace. A guest invited with 'edit' on the task may only change its description.",
                 "consumes": [
                     "application/json"
                 ],
@@ -2014,34 +2775,51 @@ const docTemplate = `{
                         }
                     },
                     "400": {
-                        "description": "Bad Request",
+                        "description": "invalid id | invalid columnId | invalid taskId | could not read body | could not decode body | errors: {field: message} (validation)",
                         "schema": {
-                            "$ref": "#/definitions/utils.ErrorResponse"
+                            "$ref": "#/definitions/BadRequestResponse"
                         }
                     },
                     "401": {
-                        "description": "Unauthorized",
+                        "description": "Missing or invalid token (text/plain)",
                         "schema": {
-                            "$ref": "#/definitions/utils.ErrorResponse"
+                            "$ref": "#/definitions/UnauthorizedResponse"
+                        }
+                    },
+                    "403": {
+                        "description": "edit access required | guests can only edit the description",
+                        "schema": {
+                            "$ref": "#/definitions/ErrorResponse"
                         }
                     },
                     "404": {
-                        "description": "Not Found",
+                        "description": "workspace not found | column not found | task not found | target column not found in this workspace | tag not found",
                         "schema": {
-                            "$ref": "#/definitions/utils.ErrorResponse"
+                            "$ref": "#/definitions/ErrorResponse"
+                        }
+                    },
+                    "415": {
+                        "description": "Unsupported Media Type",
+                        "schema": {
+                            "$ref": "#/definitions/UnsupportedMediaTypeResponse"
                         }
                     },
                     "422": {
-                        "description": "Unprocessable Entity",
+                        "description": "invalid status",
                         "schema": {
-                            "type": "object",
-                            "additionalProperties": true
+                            "$ref": "#/definitions/ErrorResponse"
+                        }
+                    },
+                    "429": {
+                        "description": "Rate limit exceeded (text/plain)",
+                        "schema": {
+                            "$ref": "#/definitions/TooManyRequestsResponse"
                         }
                     },
                     "500": {
                         "description": "Internal Server Error",
                         "schema": {
-                            "$ref": "#/definitions/utils.ErrorResponse"
+                            "$ref": "#/definitions/InternalErrorResponse"
                         }
                     }
                 }
@@ -2054,6 +2832,7 @@ const docTemplate = `{
                         "BearerAuth": []
                     }
                 ],
+                "description": "Members assigned to the task, followed by the guests who accepted an invitation on it (is_guest).",
                 "produces": [
                     "application/json"
                 ],
@@ -2095,27 +2874,33 @@ const docTemplate = `{
                         }
                     },
                     "400": {
-                        "description": "Bad Request",
+                        "description": "invalid id | invalid columnId | invalid taskId",
                         "schema": {
-                            "$ref": "#/definitions/utils.ErrorResponse"
+                            "$ref": "#/definitions/ErrorResponse"
                         }
                     },
                     "401": {
-                        "description": "Unauthorized",
+                        "description": "Missing or invalid token (text/plain)",
                         "schema": {
-                            "$ref": "#/definitions/utils.ErrorResponse"
+                            "$ref": "#/definitions/UnauthorizedResponse"
                         }
                     },
                     "404": {
-                        "description": "Not Found",
+                        "description": "workspace not found | column not found | task not found",
                         "schema": {
-                            "$ref": "#/definitions/utils.ErrorResponse"
+                            "$ref": "#/definitions/ErrorResponse"
+                        }
+                    },
+                    "429": {
+                        "description": "Rate limit exceeded (text/plain)",
+                        "schema": {
+                            "$ref": "#/definitions/TooManyRequestsResponse"
                         }
                     },
                     "500": {
                         "description": "Internal Server Error",
                         "schema": {
-                            "$ref": "#/definitions/utils.ErrorResponse"
+                            "$ref": "#/definitions/InternalErrorResponse"
                         }
                     }
                 }
@@ -2126,7 +2911,7 @@ const docTemplate = `{
                         "BearerAuth": []
                     }
                 ],
-                "description": "Grants the member a task-specific role, independent of their organisation role. This role always takes precedence when resolving the member's effective access to this task. Requires edit access on the task.",
+                "description": "Shows the member as working on the task. An assignment grants no access and changes no role. The member must have access to the workspace. Requires edit access on the workspace.",
                 "consumes": [
                     "application/json"
                 ],
@@ -2174,34 +2959,45 @@ const docTemplate = `{
                         "description": "No Content"
                     },
                     "400": {
-                        "description": "Bad Request",
+                        "description": "invalid id | invalid columnId | invalid taskId | could not read body | could not decode body | errors: {field: message} (validation)",
                         "schema": {
-                            "$ref": "#/definitions/utils.ErrorResponse"
+                            "$ref": "#/definitions/BadRequestResponse"
                         }
                     },
                     "401": {
-                        "description": "Unauthorized",
+                        "description": "Missing or invalid token (text/plain)",
                         "schema": {
-                            "$ref": "#/definitions/utils.ErrorResponse"
+                            "$ref": "#/definitions/UnauthorizedResponse"
+                        }
+                    },
+                    "403": {
+                        "description": "edit access required",
+                        "schema": {
+                            "$ref": "#/definitions/ErrorResponse"
                         }
                     },
                     "404": {
-                        "description": "Not Found",
+                        "description": "workspace not found | column not found | task not found | member not found in this workspace",
                         "schema": {
-                            "$ref": "#/definitions/utils.ErrorResponse"
+                            "$ref": "#/definitions/ErrorResponse"
                         }
                     },
-                    "422": {
-                        "description": "Unprocessable Entity",
+                    "415": {
+                        "description": "Unsupported Media Type",
                         "schema": {
-                            "type": "object",
-                            "additionalProperties": true
+                            "$ref": "#/definitions/UnsupportedMediaTypeResponse"
+                        }
+                    },
+                    "429": {
+                        "description": "Rate limit exceeded (text/plain)",
+                        "schema": {
+                            "$ref": "#/definitions/TooManyRequestsResponse"
                         }
                     },
                     "500": {
                         "description": "Internal Server Error",
                         "schema": {
-                            "$ref": "#/definitions/utils.ErrorResponse"
+                            "$ref": "#/definitions/InternalErrorResponse"
                         }
                     }
                 }
@@ -2253,27 +3049,39 @@ const docTemplate = `{
                         "description": "No Content"
                     },
                     "400": {
-                        "description": "Bad Request",
+                        "description": "invalid id | invalid columnId | invalid taskId | invalid memberId",
                         "schema": {
-                            "$ref": "#/definitions/utils.ErrorResponse"
+                            "$ref": "#/definitions/ErrorResponse"
                         }
                     },
                     "401": {
-                        "description": "Unauthorized",
+                        "description": "Missing or invalid token (text/plain)",
                         "schema": {
-                            "$ref": "#/definitions/utils.ErrorResponse"
+                            "$ref": "#/definitions/UnauthorizedResponse"
+                        }
+                    },
+                    "403": {
+                        "description": "edit access required",
+                        "schema": {
+                            "$ref": "#/definitions/ErrorResponse"
                         }
                     },
                     "404": {
-                        "description": "Not Found",
+                        "description": "workspace not found | column not found | task not found",
                         "schema": {
-                            "$ref": "#/definitions/utils.ErrorResponse"
+                            "$ref": "#/definitions/ErrorResponse"
+                        }
+                    },
+                    "429": {
+                        "description": "Rate limit exceeded (text/plain)",
+                        "schema": {
+                            "$ref": "#/definitions/TooManyRequestsResponse"
                         }
                     },
                     "500": {
                         "description": "Internal Server Error",
                         "schema": {
-                            "$ref": "#/definitions/utils.ErrorResponse"
+                            "$ref": "#/definitions/InternalErrorResponse"
                         }
                     }
                 }
@@ -2286,6 +3094,7 @@ const docTemplate = `{
                         "BearerAuth": []
                     }
                 ],
+                "description": "Expired invitations are included (expires_at in the past) so that they can be resent. Allowed for the organisation owner, or an admin the workspace is shared with.",
                 "produces": [
                     "application/json"
                 ],
@@ -2339,27 +3148,39 @@ const docTemplate = `{
                         }
                     },
                     "400": {
-                        "description": "Bad Request",
+                        "description": "invalid id | invalid columnId | invalid taskId | invalid limit | invalid offset",
                         "schema": {
-                            "$ref": "#/definitions/utils.ErrorResponse"
+                            "$ref": "#/definitions/ErrorResponse"
                         }
                     },
                     "401": {
-                        "description": "Unauthorized",
+                        "description": "Missing or invalid token (text/plain)",
                         "schema": {
-                            "$ref": "#/definitions/utils.ErrorResponse"
+                            "$ref": "#/definitions/UnauthorizedResponse"
+                        }
+                    },
+                    "403": {
+                        "description": "organisation owner or admin required",
+                        "schema": {
+                            "$ref": "#/definitions/ErrorResponse"
                         }
                     },
                     "404": {
-                        "description": "Not Found",
+                        "description": "workspace not found | column not found | task not found",
                         "schema": {
-                            "$ref": "#/definitions/utils.ErrorResponse"
+                            "$ref": "#/definitions/ErrorResponse"
+                        }
+                    },
+                    "429": {
+                        "description": "Rate limit exceeded (text/plain)",
+                        "schema": {
+                            "$ref": "#/definitions/TooManyRequestsResponse"
                         }
                     },
                     "500": {
                         "description": "Internal Server Error",
                         "schema": {
-                            "$ref": "#/definitions/utils.ErrorResponse"
+                            "$ref": "#/definitions/InternalErrorResponse"
                         }
                     }
                 }
@@ -2370,7 +3191,7 @@ const docTemplate = `{
                         "BearerAuth": []
                     }
                 ],
-                "description": "Invites someone by email to a single task, without granting any organisation membership. They can accept even without an existing Kanbano account.",
+                "description": "Invites someone by email to a single task, without granting any organisation membership. They can accept even without an existing Kanbano account. The invitation expires after 7 days; inviting the same email again replaces an expired invitation. Allowed for the organisation owner, or an admin the workspace is shared with.",
                 "consumes": [
                     "application/json"
                 ],
@@ -2421,40 +3242,243 @@ const docTemplate = `{
                         }
                     },
                     "400": {
-                        "description": "Bad Request",
+                        "description": "invalid id | invalid columnId | invalid taskId | could not read body | could not decode body | errors: {field: message} (validation)",
                         "schema": {
-                            "$ref": "#/definitions/utils.ErrorResponse"
+                            "$ref": "#/definitions/BadRequestResponse"
                         }
                     },
                     "401": {
-                        "description": "Unauthorized",
+                        "description": "Missing or invalid token (text/plain)",
                         "schema": {
-                            "$ref": "#/definitions/utils.ErrorResponse"
+                            "$ref": "#/definitions/UnauthorizedResponse"
+                        }
+                    },
+                    "403": {
+                        "description": "organisation owner or admin required",
+                        "schema": {
+                            "$ref": "#/definitions/ErrorResponse"
                         }
                     },
                     "404": {
-                        "description": "Not Found",
+                        "description": "workspace not found | column not found | task not found",
                         "schema": {
-                            "$ref": "#/definitions/utils.ErrorResponse"
+                            "$ref": "#/definitions/ErrorResponse"
                         }
                     },
                     "409": {
-                        "description": "Conflict",
+                        "description": "an invitation is already pending for this email | this user already has access to this task",
                         "schema": {
-                            "$ref": "#/definitions/utils.ErrorResponse"
+                            "$ref": "#/definitions/ErrorResponse"
                         }
                     },
-                    "422": {
-                        "description": "Unprocessable Entity",
+                    "415": {
+                        "description": "Unsupported Media Type",
                         "schema": {
-                            "type": "object",
-                            "additionalProperties": true
+                            "$ref": "#/definitions/UnsupportedMediaTypeResponse"
+                        }
+                    },
+                    "429": {
+                        "description": "Rate limit exceeded (text/plain)",
+                        "schema": {
+                            "$ref": "#/definitions/TooManyRequestsResponse"
                         }
                     },
                     "500": {
                         "description": "Internal Server Error",
                         "schema": {
-                            "$ref": "#/definitions/utils.ErrorResponse"
+                            "$ref": "#/definitions/InternalErrorResponse"
+                        }
+                    }
+                }
+            }
+        },
+        "/workspaces/{id}/columns/{columnId}/tasks/{taskId}/guests/{userId}": {
+            "put": {
+                "security": [
+                    {
+                        "BearerAuth": []
+                    }
+                ],
+                "description": "Changes the role ('view' or 'edit') of a guest who accepted an invitation on this task. Allowed for the organisation owner, or an admin the workspace is shared with.",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "task"
+                ],
+                "summary": "Change a guest's role on a task",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "Workspace ID",
+                        "name": "id",
+                        "in": "path",
+                        "required": true
+                    },
+                    {
+                        "type": "string",
+                        "description": "Column ID",
+                        "name": "columnId",
+                        "in": "path",
+                        "required": true
+                    },
+                    {
+                        "type": "string",
+                        "description": "Task ID",
+                        "name": "taskId",
+                        "in": "path",
+                        "required": true
+                    },
+                    {
+                        "type": "string",
+                        "description": "Guest's user ID",
+                        "name": "userId",
+                        "in": "path",
+                        "required": true
+                    },
+                    {
+                        "description": "New role",
+                        "name": "body",
+                        "in": "body",
+                        "required": true,
+                        "schema": {
+                            "$ref": "#/definitions/handler.setTaskGuestRoleBody"
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/utils.UpdateResponse"
+                        }
+                    },
+                    "400": {
+                        "description": "invalid id | invalid columnId | invalid taskId | invalid userId | could not read body | could not decode body | errors: {field: message} (validation)",
+                        "schema": {
+                            "$ref": "#/definitions/BadRequestResponse"
+                        }
+                    },
+                    "401": {
+                        "description": "Missing or invalid token (text/plain)",
+                        "schema": {
+                            "$ref": "#/definitions/UnauthorizedResponse"
+                        }
+                    },
+                    "403": {
+                        "description": "organisation owner or admin required",
+                        "schema": {
+                            "$ref": "#/definitions/ErrorResponse"
+                        }
+                    },
+                    "404": {
+                        "description": "workspace not found | column not found | task not found | guest not found",
+                        "schema": {
+                            "$ref": "#/definitions/ErrorResponse"
+                        }
+                    },
+                    "415": {
+                        "description": "Unsupported Media Type",
+                        "schema": {
+                            "$ref": "#/definitions/UnsupportedMediaTypeResponse"
+                        }
+                    },
+                    "429": {
+                        "description": "Rate limit exceeded (text/plain)",
+                        "schema": {
+                            "$ref": "#/definitions/TooManyRequestsResponse"
+                        }
+                    },
+                    "500": {
+                        "description": "Internal Server Error",
+                        "schema": {
+                            "$ref": "#/definitions/InternalErrorResponse"
+                        }
+                    }
+                }
+            },
+            "delete": {
+                "security": [
+                    {
+                        "BearerAuth": []
+                    }
+                ],
+                "description": "Removes the access of a guest who accepted an invitation on this task; they no longer see it nor appear among its assignees. Allowed for the organisation owner, or an admin the workspace is shared with.",
+                "tags": [
+                    "task"
+                ],
+                "summary": "Remove a guest from a task",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "Workspace ID",
+                        "name": "id",
+                        "in": "path",
+                        "required": true
+                    },
+                    {
+                        "type": "string",
+                        "description": "Column ID",
+                        "name": "columnId",
+                        "in": "path",
+                        "required": true
+                    },
+                    {
+                        "type": "string",
+                        "description": "Task ID",
+                        "name": "taskId",
+                        "in": "path",
+                        "required": true
+                    },
+                    {
+                        "type": "string",
+                        "description": "Guest's user ID",
+                        "name": "userId",
+                        "in": "path",
+                        "required": true
+                    }
+                ],
+                "responses": {
+                    "204": {
+                        "description": "No Content"
+                    },
+                    "400": {
+                        "description": "invalid id | invalid columnId | invalid taskId | invalid userId",
+                        "schema": {
+                            "$ref": "#/definitions/ErrorResponse"
+                        }
+                    },
+                    "401": {
+                        "description": "Missing or invalid token (text/plain)",
+                        "schema": {
+                            "$ref": "#/definitions/UnauthorizedResponse"
+                        }
+                    },
+                    "403": {
+                        "description": "organisation owner or admin required",
+                        "schema": {
+                            "$ref": "#/definitions/ErrorResponse"
+                        }
+                    },
+                    "404": {
+                        "description": "workspace not found | column not found | task not found | guest not found",
+                        "schema": {
+                            "$ref": "#/definitions/ErrorResponse"
+                        }
+                    },
+                    "429": {
+                        "description": "Rate limit exceeded (text/plain)",
+                        "schema": {
+                            "$ref": "#/definitions/TooManyRequestsResponse"
+                        }
+                    },
+                    "500": {
+                        "description": "Internal Server Error",
+                        "schema": {
+                            "$ref": "#/definitions/InternalErrorResponse"
                         }
                     }
                 }
@@ -2467,7 +3491,7 @@ const docTemplate = `{
                         "BearerAuth": []
                     }
                 ],
-                "description": "Sets whether this workspace is visible to the member ('private', the default, or 'public') and/or their role on it ('view', the default, or 'edit'). Both fields are optional and independent; omitting one leaves it unchanged (or at its default if this is the member's first override on this workspace). Only callers with organisation-level 'edit' (manage) may call this.",
+                "description": "Sets whether this workspace is visible to the member ('private', the default, or 'public') and/or their role on it ('view', the default, or 'edit'). Both fields are optional and independent; omitting one leaves it unchanged (or at its default if this is the member's first override on this workspace). Allowed for the organisation owner, or an admin the workspace is shared with; an admin only manages members, never another admin or the owner, and nobody changes their own access. The member must belong to the organisation. Same effect as PATCH /workspaces/{id} with a single entry in members.",
                 "consumes": [
                     "application/json"
                 ],
@@ -2511,40 +3535,45 @@ const docTemplate = `{
                         }
                     },
                     "400": {
-                        "description": "Bad Request",
+                        "description": "invalid id | invalid memberID | could not read body | could not decode body | errors: {field: message} (validation)",
                         "schema": {
-                            "$ref": "#/definitions/utils.ErrorResponse"
+                            "$ref": "#/definitions/BadRequestResponse"
                         }
                     },
                     "401": {
-                        "description": "Unauthorized",
+                        "description": "Missing or invalid token (text/plain)",
                         "schema": {
-                            "$ref": "#/definitions/utils.ErrorResponse"
+                            "$ref": "#/definitions/UnauthorizedResponse"
                         }
                     },
                     "403": {
-                        "description": "Forbidden",
+                        "description": "organisation owner or admin required | cannot change your own access | cannot manage this member's access",
                         "schema": {
-                            "$ref": "#/definitions/utils.ErrorResponse"
+                            "$ref": "#/definitions/ErrorResponse"
                         }
                     },
                     "404": {
-                        "description": "Not Found",
+                        "description": "workspace not found | member not found in this organisation",
                         "schema": {
-                            "$ref": "#/definitions/utils.ErrorResponse"
+                            "$ref": "#/definitions/ErrorResponse"
                         }
                     },
-                    "422": {
-                        "description": "Unprocessable Entity",
+                    "415": {
+                        "description": "Unsupported Media Type",
                         "schema": {
-                            "type": "object",
-                            "additionalProperties": true
+                            "$ref": "#/definitions/UnsupportedMediaTypeResponse"
+                        }
+                    },
+                    "429": {
+                        "description": "Rate limit exceeded (text/plain)",
+                        "schema": {
+                            "$ref": "#/definitions/TooManyRequestsResponse"
                         }
                     },
                     "500": {
                         "description": "Internal Server Error",
                         "schema": {
-                            "$ref": "#/definitions/utils.ErrorResponse"
+                            "$ref": "#/definitions/InternalErrorResponse"
                         }
                     }
                 }
@@ -2557,7 +3586,7 @@ const docTemplate = `{
                         "BearerAuth": []
                     }
                 ],
-                "description": "Single query resolving, for every task the caller can see, their effective role: a task_assignees entry always wins over the caller's organisation role.",
+                "description": "Lists the tasks the caller sees, with their role on each: every task with the same role for a member ('edit' if they may modify tasks), only the tasks shared with them for a guest, with their guest role ('edit' then only allows changing the description).",
                 "produces": [
                     "application/json"
                 ],
@@ -2585,27 +3614,33 @@ const docTemplate = `{
                         }
                     },
                     "400": {
-                        "description": "Bad Request",
+                        "description": "invalid id",
                         "schema": {
-                            "$ref": "#/definitions/utils.ErrorResponse"
+                            "$ref": "#/definitions/ErrorResponse"
                         }
                     },
                     "401": {
-                        "description": "Unauthorized",
+                        "description": "Missing or invalid token (text/plain)",
                         "schema": {
-                            "$ref": "#/definitions/utils.ErrorResponse"
+                            "$ref": "#/definitions/UnauthorizedResponse"
                         }
                     },
                     "404": {
-                        "description": "Not Found",
+                        "description": "workspace not found",
                         "schema": {
-                            "$ref": "#/definitions/utils.ErrorResponse"
+                            "$ref": "#/definitions/ErrorResponse"
+                        }
+                    },
+                    "429": {
+                        "description": "Rate limit exceeded (text/plain)",
+                        "schema": {
+                            "$ref": "#/definitions/TooManyRequestsResponse"
                         }
                     },
                     "500": {
                         "description": "Internal Server Error",
                         "schema": {
-                            "$ref": "#/definitions/utils.ErrorResponse"
+                            "$ref": "#/definitions/InternalErrorResponse"
                         }
                     }
                 }
@@ -2623,9 +3658,15 @@ const docTemplate = `{
                         "description": "Switching Protocols"
                     },
                     "401": {
-                        "description": "missing or invalid token",
+                        "description": "Missing or invalid token (text/plain)",
                         "schema": {
-                            "type": "string"
+                            "$ref": "#/definitions/UnauthorizedResponse"
+                        }
+                    },
+                    "429": {
+                        "description": "Rate limit exceeded (text/plain)",
+                        "schema": {
+                            "$ref": "#/definitions/TooManyRequestsResponse"
                         }
                     }
                 }
@@ -2633,22 +3674,127 @@ const docTemplate = `{
         }
     },
     "definitions": {
+        "AdminForbiddenResponse": {
+            "type": "string",
+            "enum": [
+                "forbidden"
+            ],
+            "x-enum-varnames": [
+                "AdminForbidden"
+            ]
+        },
+        "BadRequestResponse": {
+            "type": "object",
+            "properties": {
+                "args": {
+                    "type": "array",
+                    "items": {
+                        "type": "string"
+                    }
+                },
+                "error": {
+                    "type": "string",
+                    "example": "could not decode body"
+                },
+                "errors": {
+                    "type": "object",
+                    "additionalProperties": {
+                        "type": "string"
+                    },
+                    "example": {
+                        "name": "name est un champ obligatoire"
+                    }
+                }
+            }
+        },
+        "ErrorResponse": {
+            "type": "object",
+            "required": [
+                "args",
+                "error"
+            ],
+            "properties": {
+                "args": {
+                    "type": "array",
+                    "items": {
+                        "type": "string"
+                    }
+                },
+                "error": {
+                    "type": "string"
+                }
+            }
+        },
+        "InternalErrorResponse": {
+            "type": "object",
+            "required": [
+                "args",
+                "error"
+            ],
+            "properties": {
+                "args": {
+                    "type": "array",
+                    "items": {
+                        "type": "string"
+                    }
+                },
+                "error": {
+                    "type": "string",
+                    "enum": [
+                        "internal server error"
+                    ]
+                }
+            }
+        },
+        "TooManyRequestsResponse": {
+            "type": "string",
+            "enum": [
+                "too many requests"
+            ],
+            "x-enum-varnames": [
+                "TooManyRequests"
+            ]
+        },
+        "UnauthorizedResponse": {
+            "type": "string",
+            "enum": [
+                "missing token",
+                "invalid token"
+            ],
+            "x-enum-varnames": [
+                "UnauthorizedMissingToken",
+                "UnauthorizedInvalidToken"
+            ]
+        },
+        "UnsupportedMediaTypeResponse": {
+            "type": "object",
+            "required": [
+                "args",
+                "error"
+            ],
+            "properties": {
+                "args": {
+                    "type": "array",
+                    "items": {
+                        "type": "string"
+                    }
+                },
+                "error": {
+                    "type": "string",
+                    "enum": [
+                        "unexpected content-type"
+                    ]
+                }
+            }
+        },
         "handler.assignTaskBody": {
             "type": "object",
             "required": [
-                "member_id",
-                "role"
+                "member_id"
             ],
             "properties": {
                 "member_id": {
                     "type": "string"
-                },
-                "role": {
-                    "type": "string",
-                    "enum": [
-                        "view",
-                        "edit"
-                    ]
                 }
             }
         },
@@ -2725,7 +3871,12 @@ const docTemplate = `{
                     "minLength": 1
                 },
                 "status": {
-                    "type": "string"
+                    "type": "string",
+                    "enum": [
+                        "À faire",
+                        "En cours",
+                        "Terminé"
+                    ]
                 },
                 "tag_id": {
                     "type": "string"
@@ -2765,8 +3916,8 @@ const docTemplate = `{
                 "role": {
                     "type": "string",
                     "enum": [
-                        "view",
-                        "edit"
+                        "admin",
+                        "member"
                     ]
                 }
             }
@@ -2800,7 +3951,12 @@ const docTemplate = `{
             ],
             "properties": {
                 "avatar": {
-                    "$ref": "#/definitions/models.AvatarSet"
+                    "allOf": [
+                        {
+                            "$ref": "#/definitions/models.AvatarSet"
+                        }
+                    ],
+                    "x-nullable": true
                 },
                 "avatar_updated_at": {
                     "type": "string"
@@ -2815,7 +3971,8 @@ const docTemplate = `{
                     "type": "string"
                 },
                 "name": {
-                    "type": "string"
+                    "type": "string",
+                    "x-nullable": true
                 }
             }
         },
@@ -2831,7 +3988,12 @@ const docTemplate = `{
             ],
             "properties": {
                 "avatar": {
-                    "$ref": "#/definitions/models.AvatarSet"
+                    "allOf": [
+                        {
+                            "$ref": "#/definitions/models.AvatarSet"
+                        }
+                    ],
+                    "x-nullable": true
                 },
                 "email": {
                     "type": "string"
@@ -2843,7 +4005,12 @@ const docTemplate = `{
                     "type": "string"
                 },
                 "role": {
-                    "type": "string"
+                    "type": "string",
+                    "enum": [
+                        "owner",
+                        "admin",
+                        "member"
+                    ]
                 },
                 "workspaces": {
                     "type": "array",
@@ -2864,19 +4031,30 @@ const docTemplate = `{
             ],
             "properties": {
                 "avatar": {
-                    "$ref": "#/definitions/models.AvatarSet"
+                    "allOf": [
+                        {
+                            "$ref": "#/definitions/models.AvatarSet"
+                        }
+                    ],
+                    "x-nullable": true
                 },
                 "id": {
                     "type": "string"
                 },
                 "joined_at": {
-                    "type": "string"
+                    "type": "string",
+                    "x-nullable": true
                 },
                 "name": {
                     "type": "string"
                 },
                 "role": {
-                    "type": "string"
+                    "type": "string",
+                    "enum": [
+                        "owner",
+                        "admin",
+                        "member"
+                    ]
                 }
             }
         },
@@ -2885,6 +4063,8 @@ const docTemplate = `{
             "required": [
                 "id",
                 "members",
+                "name",
+                "role",
                 "user_id"
             ],
             "properties": {
@@ -2896,6 +4076,17 @@ const docTemplate = `{
                     "items": {
                         "$ref": "#/definitions/handler.memberResponse"
                     }
+                },
+                "name": {
+                    "type": "string"
+                },
+                "role": {
+                    "type": "string",
+                    "enum": [
+                        "owner",
+                        "admin",
+                        "member"
+                    ]
                 },
                 "user_id": {
                     "type": "string"
@@ -2909,7 +4100,44 @@ const docTemplate = `{
             ],
             "properties": {
                 "role": {
-                    "type": "string"
+                    "type": "string",
+                    "enum": [
+                        "owner",
+                        "admin",
+                        "member",
+                        "view",
+                        "edit"
+                    ]
+                }
+            }
+        },
+        "handler.setMemberRoleBody": {
+            "type": "object",
+            "required": [
+                "role"
+            ],
+            "properties": {
+                "role": {
+                    "type": "string",
+                    "enum": [
+                        "admin",
+                        "member"
+                    ]
+                }
+            }
+        },
+        "handler.setTaskGuestRoleBody": {
+            "type": "object",
+            "required": [
+                "role"
+            ],
+            "properties": {
+                "role": {
+                    "type": "string",
+                    "enum": [
+                        "view",
+                        "edit"
+                    ]
                 }
             }
         },
@@ -2942,6 +4170,7 @@ const docTemplate = `{
                 },
                 "position": {
                     "type": "integer",
+                    "maximum": 2147483647,
                     "minimum": 0
                 }
             }
@@ -2974,6 +4203,19 @@ const docTemplate = `{
                 }
             }
         },
+        "handler.updateOrganisationBody": {
+            "type": "object",
+            "required": [
+                "name"
+            ],
+            "properties": {
+                "name": {
+                    "type": "string",
+                    "maxLength": 255,
+                    "minLength": 1
+                }
+            }
+        },
         "handler.updateTagBody": {
             "type": "object",
             "properties": {
@@ -3002,10 +4244,16 @@ const docTemplate = `{
                 },
                 "position": {
                     "type": "integer",
+                    "maximum": 2147483647,
                     "minimum": 0
                 },
                 "status": {
-                    "type": "string"
+                    "type": "string",
+                    "enum": [
+                        "À faire",
+                        "En cours",
+                        "Terminé"
+                    ]
                 },
                 "tag_id": {
                     "type": "string"
@@ -3041,10 +4289,42 @@ const docTemplate = `{
                     "type": "string",
                     "maxLength": 2000
                 },
+                "members": {
+                    "type": "array",
+                    "uniqueItems": true,
+                    "items": {
+                        "$ref": "#/definitions/handler.updateWorkspaceMemberBody"
+                    }
+                },
                 "name": {
                     "type": "string",
                     "maxLength": 100,
                     "minLength": 1
+                }
+            }
+        },
+        "handler.updateWorkspaceMemberBody": {
+            "type": "object",
+            "required": [
+                "id"
+            ],
+            "properties": {
+                "id": {
+                    "type": "string"
+                },
+                "role": {
+                    "type": "string",
+                    "enum": [
+                        "view",
+                        "edit"
+                    ]
+                },
+                "visibility": {
+                    "type": "string",
+                    "enum": [
+                        "private",
+                        "public"
+                    ]
                 }
             }
         },
@@ -3056,17 +4336,34 @@ const docTemplate = `{
             ],
             "properties": {
                 "action": {
-                    "type": "string"
+                    "type": "string",
+                    "enum": [
+                        "read",
+                        "create",
+                        "update",
+                        "delete",
+                        "share",
+                        "assign",
+                        "invite"
+                    ]
                 },
                 "conditions": {
                     "type": "object",
                     "additionalProperties": {}
                 },
-                "inverted": {
-                    "type": "boolean"
+                "fields": {
+                    "type": "array",
+                    "items": {
+                        "type": "string"
+                    }
                 },
                 "subject": {
-                    "type": "string"
+                    "type": "string",
+                    "enum": [
+                        "Workspace",
+                        "Column",
+                        "Task"
+                    ]
                 }
             }
         },
@@ -3157,7 +4454,8 @@ const docTemplate = `{
                     }
                 },
                 "updated_at": {
-                    "type": "string"
+                    "type": "string",
+                    "x-nullable": true
                 }
             }
         },
@@ -3229,12 +4527,51 @@ const docTemplate = `{
                     "type": "string"
                 },
                 "responded_at": {
+                    "type": "string",
+                    "x-nullable": true
+                },
+                "role": {
+                    "type": "string",
+                    "enum": [
+                        "admin",
+                        "member"
+                    ],
+                    "x-nullable": true
+                },
+                "status": {
+                    "type": "string",
+                    "enum": [
+                        "pending",
+                        "accepted",
+                        "declined"
+                    ]
+                }
+            }
+        },
+        "models.OrganisationSummary": {
+            "type": "object",
+            "required": [
+                "id",
+                "name",
+                "role",
+                "user_id"
+            ],
+            "properties": {
+                "id": {
+                    "type": "string"
+                },
+                "name": {
                     "type": "string"
                 },
                 "role": {
-                    "type": "string"
+                    "type": "string",
+                    "enum": [
+                        "owner",
+                        "admin",
+                        "member"
+                    ]
                 },
-                "status": {
+                "user_id": {
                     "type": "string"
                 }
             }
@@ -3253,7 +4590,8 @@ const docTemplate = `{
             ],
             "properties": {
                 "color": {
-                    "type": "string"
+                    "type": "string",
+                    "x-nullable": true
                 },
                 "created_at": {
                     "type": "string"
@@ -3262,7 +4600,8 @@ const docTemplate = `{
                     "type": "string"
                 },
                 "deleted_by": {
-                    "type": "string"
+                    "type": "string",
+                    "x-nullable": true
                 },
                 "id": {
                     "type": "string"
@@ -3271,10 +4610,12 @@ const docTemplate = `{
                     "type": "string"
                 },
                 "updated_at": {
-                    "type": "string"
+                    "type": "string",
+                    "x-nullable": true
                 },
                 "updated_by": {
-                    "type": "string"
+                    "type": "string",
+                    "x-nullable": true
                 }
             }
         },
@@ -3287,7 +4628,8 @@ const docTemplate = `{
             ],
             "properties": {
                 "color": {
-                    "type": "string"
+                    "type": "string",
+                    "x-nullable": true
                 },
                 "id": {
                     "type": "string"
@@ -3306,7 +4648,12 @@ const docTemplate = `{
             ],
             "properties": {
                 "avatar": {
-                    "$ref": "#/definitions/models.AvatarSet"
+                    "allOf": [
+                        {
+                            "$ref": "#/definitions/models.AvatarSet"
+                        }
+                    ],
+                    "x-nullable": true
                 },
                 "email": {
                     "type": "string"
@@ -3321,8 +4668,8 @@ const docTemplate = `{
             "required": [
                 "email",
                 "id",
-                "name",
-                "role"
+                "is_guest",
+                "name"
             ],
             "properties": {
                 "email": {
@@ -3331,11 +4678,12 @@ const docTemplate = `{
                 "id": {
                     "type": "string"
                 },
-                "name": {
-                    "type": "string"
+                "is_guest": {
+                    "type": "boolean"
                 },
-                "role": {
-                    "type": "string"
+                "name": {
+                    "type": "string",
+                    "x-nullable": true
                 }
             }
         },
@@ -3344,6 +4692,7 @@ const docTemplate = `{
             "required": [
                 "created_at",
                 "email",
+                "expires_at",
                 "id",
                 "invited_by",
                 "responded_at",
@@ -3359,6 +4708,9 @@ const docTemplate = `{
                 "email": {
                     "type": "string"
                 },
+                "expires_at": {
+                    "type": "string"
+                },
                 "id": {
                     "type": "string"
                 },
@@ -3366,19 +4718,30 @@ const docTemplate = `{
                     "type": "string"
                 },
                 "responded_at": {
-                    "type": "string"
+                    "type": "string",
+                    "x-nullable": true
                 },
                 "role": {
-                    "type": "string"
+                    "type": "string",
+                    "enum": [
+                        "view",
+                        "edit"
+                    ]
                 },
                 "status": {
-                    "type": "string"
+                    "type": "string",
+                    "enum": [
+                        "pending",
+                        "accepted",
+                        "declined"
+                    ]
                 },
                 "task_id": {
                     "type": "string"
                 },
                 "user_id": {
-                    "type": "string"
+                    "type": "string",
+                    "x-nullable": true
                 }
             }
         },
@@ -3394,7 +4757,11 @@ const docTemplate = `{
                     "type": "string"
                 },
                 "role": {
-                    "type": "string"
+                    "type": "string",
+                    "enum": [
+                        "view",
+                        "edit"
+                    ]
                 },
                 "task_id": {
                     "type": "string"
@@ -3434,7 +4801,8 @@ const docTemplate = `{
                     "type": "string"
                 },
                 "description": {
-                    "type": "string"
+                    "type": "string",
+                    "x-nullable": true
                 },
                 "id": {
                     "type": "string"
@@ -3446,16 +4814,29 @@ const docTemplate = `{
                     "type": "integer"
                 },
                 "status": {
-                    "type": "string"
+                    "type": "string",
+                    "enum": [
+                        "À faire",
+                        "En cours",
+                        "Terminé"
+                    ],
+                    "x-nullable": true
                 },
                 "tag": {
-                    "$ref": "#/definitions/models.TagName"
+                    "allOf": [
+                        {
+                            "$ref": "#/definitions/models.TagName"
+                        }
+                    ],
+                    "x-nullable": true
                 },
                 "tag_id": {
-                    "type": "string"
+                    "type": "string",
+                    "x-nullable": true
                 },
                 "updated_at": {
-                    "type": "string"
+                    "type": "string",
+                    "x-nullable": true
                 }
             }
         },
@@ -3481,13 +4862,16 @@ const docTemplate = `{
                     "type": "string"
                 },
                 "deleted_at": {
-                    "type": "string"
+                    "type": "string",
+                    "x-nullable": true
                 },
                 "deleted_by": {
-                    "type": "string"
+                    "type": "string",
+                    "x-nullable": true
                 },
                 "description": {
-                    "type": "string"
+                    "type": "string",
+                    "x-nullable": true
                 },
                 "id": {
                     "type": "string"
@@ -3499,10 +4883,12 @@ const docTemplate = `{
                     "type": "string"
                 },
                 "updated_at": {
-                    "type": "string"
+                    "type": "string",
+                    "x-nullable": true
                 },
                 "updated_by": {
-                    "type": "string"
+                    "type": "string",
+                    "x-nullable": true
                 }
             }
         },
@@ -3513,7 +4899,9 @@ const docTemplate = `{
                 "created_at",
                 "description",
                 "id",
+                "members",
                 "name",
+                "organisation_id",
                 "updated_at"
             ],
             "properties": {
@@ -3527,17 +4915,88 @@ const docTemplate = `{
                     "type": "string"
                 },
                 "description": {
+                    "type": "string",
+                    "x-nullable": true
+                },
+                "id": {
+                    "type": "string"
+                },
+                "members": {
+                    "type": "array",
+                    "items": {
+                        "$ref": "#/definitions/models.WorkspaceMember"
+                    }
+                },
+                "name": {
+                    "type": "string"
+                },
+                "organisation_id": {
+                    "type": "string"
+                },
+                "updated_at": {
+                    "type": "string",
+                    "x-nullable": true
+                }
+            }
+        },
+        "models.WorkspaceMember": {
+            "type": "object",
+            "required": [
+                "avatar",
+                "email",
+                "id",
+                "name",
+                "organisation_role",
+                "role"
+            ],
+            "properties": {
+                "avatar": {
+                    "allOf": [
+                        {
+                            "$ref": "#/definitions/models.AvatarSet"
+                        }
+                    ],
+                    "x-nullable": true
+                },
+                "email": {
                     "type": "string"
                 },
                 "id": {
                     "type": "string"
                 },
                 "name": {
+                    "type": "string",
+                    "x-nullable": true
+                },
+                "organisation_role": {
+                    "type": "string",
+                    "enum": [
+                        "admin",
+                        "member"
+                    ]
+                },
+                "role": {
+                    "type": "string",
+                    "enum": [
+                        "view",
+                        "edit"
+                    ]
+                }
+            }
+        },
+        "models.WorkspaceName": {
+            "type": "object",
+            "required": [
+                "id",
+                "name"
+            ],
+            "properties": {
+                "id": {
                     "type": "string"
                 },
-                "updated_at": {
+                "name": {
                     "type": "string"
-                } 
+                }
             }
         },
         "models.WorkspaceRole": {
@@ -3560,9 +5019,37 @@ const docTemplate = `{
                     "type": "string"
                 },
                 "role": {
-                    "type": "string"
+                    "type": "string",
+                    "enum": [
+                        "view",
+                        "edit"
+                    ]
                 },
                 "visibility": {
+                    "type": "string",
+                    "enum": [
+                        "private",
+                        "public"
+                    ]
+                }
+            }
+        },
+        "models.WorkspaceSearchResult": {
+            "type": "object",
+            "required": [
+                "description",
+                "id",
+                "name"
+            ],
+            "properties": {
+                "description": {
+                    "type": "string",
+                    "x-nullable": true
+                },
+                "id": {
+                    "type": "string"
+                },
+                "name": {
                     "type": "string"
                 }
             }
@@ -3577,24 +5064,6 @@ const docTemplate = `{
                     "type": "string"
                 },
                 "status": {
-                    "type": "string"
-                }
-            }
-        },
-        "utils.ErrorResponse": {
-            "type": "object",
-            "required": [
-                "args",
-                "error"
-            ],
-            "properties": {
-                "args": {
-                    "type": "array",
-                    "items": {
-                        "type": "string"
-                    }
-                },
-                "error": {
                     "type": "string"
                 }
             }
@@ -3628,7 +5097,7 @@ var SwaggerInfo = &swag.Spec{
 	BasePath:         "/api/v1",
 	Schemes:          []string{},
 	Title:            "Kanbano API",
-	Description:      "REST API for the Kanbano kanban application (workspaces, columns, tasks, tags, organisations, users).",
+	Description:      "REST API de l'application kanban Kanbano (workspaces, colonnes, tâches, tags,\norganisations, utilisateurs).\n\nConventions communes à toutes les routes ci-dessous. Pour chaque route, la\ndescription de chaque code d'erreur liste les valeurs possibles de `error`,\nséparées par ` | `.\n\n# Conventions\n\n## URL et authentification\n\n- Toutes les routes métier sont sous `/api/v1` (ex. `GET /api/v1/workspaces`).\n- Authentification : header `Authorization: Bearer <JWT Neon Auth>`.\n  L'utilisateur courant est déduit du token : aucune route n'attend son ID\n  dans le body ou l'URL.\n- WebSocket `GET /api/v1/ws` : le token passe dans le header\n  `Sec-WebSocket-Protocol: bearer, <token>` (pas dans `Authorization`).\n- Rate limit par IP : 10 requêtes/s, rafale de 30.\n- Hors `/api/v1` : `GET /health` et `POST /webhooks/brevo` (non destinés au front).\n\n## Corps de requête\n\n- Header `Content-Type: application/json` obligatoire, **valeur exacte**\n  (`application/json; charset=utf-8` est refusé) → sinon `415`.\n- Les champs inconnus sont refusés → `400 {\"error\":\"could not decode body\"}`.\n- Un JSON mal formé ou un type incorrect (ex. nombre au lieu de chaîne)\n  → `400 {\"error\":\"could not decode body\"}`.\n- PATCH : seuls les champs envoyés sont modifiés ; un champ absent est ignoré.\n\n## Réponses de succès\n\n| Cas | Statut | Corps |\n|---|---|---|\n| Lecture | `200` | la ressource ou un tableau (schéma indiqué sur chaque route) |\n| Création | `201` | `{\"id\": \"<uuid>\", \"status\": \"created\"}` |\n| Modification | `200` | `{\"status\": \"updated\"}` |\n| Suppression | `204` | aucun corps |\n\nAprès une création ou une modification, le front doit relire la ressource\n(ou s'appuyer sur l'événement WebSocket) : la réponse ne la renvoie pas.\n\n## Format des erreurs\n\n### Erreur standard (JSON)\n\n```json\n{ \"error\": \"workspace not found\", \"args\": null }\n```\n\n- `error` : message en anglais, stable, utilisable comme clé de traduction.\n- `args` : paramètres éventuels du message, `null` le plus souvent.\n\n### Erreur de validation du body — `400`\n\n```json\n{ \"errors\": { \"name\": \"<message en français>\", \"email\": \"<message en français>\" } }\n```\n\n- Clé = nom JSON du champ, valeur = message déjà traduit **en français**.\n- Pour un tableau d'objets (ex. `members[].role`), la clé est le nom du champ\n  seul (`role`), sans l'index.\n- Les règles de validation de chaque champ sont dans le schéma du body :\n  `required`, `minLength`, `maxLength`, `enum`, `format`…\n- Distinguer les deux formats d'erreur `400` par la présence de `errors`\n  (validation) ou de `error` (autre erreur) : c'est le schéma\n  `BadRequestResponse`.\n- Un `422` n'existe que pour un `status` de tâche invalide\n  (`{\"error\":\"invalid status\"}`).\n\n### Erreurs en texte brut (pas du JSON)\n\nCes erreurs sortent des middlewares, avant les handlers, en `text/plain` :\n\n| Statut | Corps | Cause |\n|---|---|---|\n| `401` | `missing token` | header `Authorization` absent ou sans `Bearer ` |\n| `401` | `invalid token` | token expiré, mal signé ou invalide |\n| `429` | `too many requests` | rate limit dépassé |\n\nLe front ne doit donc pas parser le corps en JSON sur un `401` ou un `429`.\n\n## Sens des codes d'erreur\n\n| Statut | Signification |\n|---|---|\n| `400` | requête invalide : UUID mal formé dans l'URL (`invalid id`, `invalid columnId`…), `limit`/`offset` invalide, body illisible ou validation échouée |\n| `401` | pas authentifié (voir ci-dessus) : rediriger vers la connexion |\n| `403` | la ressource est visible, mais le rôle de l'utilisateur ne permet pas cette action (ex. `organisation owner or admin required`) |\n| `404` | la ressource n'existe pas, a été supprimée, **ou l'utilisateur n'y a pas accès** |\n| `409` | conflit (ex. `an invitation is already pending for this email`) |\n| `415` | `Content-Type` absent ou différent de `application/json` |\n| `422` | valeur refusée par une règle métier (ex. `invalid status`) |\n| `429` | rate limit |\n| `500` | erreur serveur : `{\"error\":\"internal server error\"}` |\n\n### 404 plutôt que 403\n\nUn workspace (et ce qu'il contient) auquel l'utilisateur n'a pas accès répond\n`404`, jamais `403` : l'API ne révèle pas l'existence d'une ressource\ninvisible. Côté front, un `404` sur une ressource affichée juste avant signifie\nle plus souvent qu'elle a été supprimée ou que l'accès a été retiré : retirer\nla ressource de l'état local et revenir à la liste.\n\n## Rôles\n\n- Organisation : `owner` (unique, créateur), `admin`, `member`.\n- Workspace : accès `view` (lecture seule) ou `edit` (colonnes et tâches).\n- Les droits effectifs sur un workspace sont renvoyés sous forme de règles\n  CASL par `GET /api/v1/workspaces/{id}/abilities` : le front\n  doit s'appuyer sur ces règles plutôt que de recalculer les droits.\n\n## Pagination\n\nRoutes paginées : query `limit` (défaut 50, max 200, au-delà ramené à 200) et\n`offset` (défaut 0). Une valeur non entière ou négative → `400`.\n\n## Temps réel (WebSocket)\n\nChaque message reçu a la forme :\n\n```json\n{ \"type\": \"task.updated\", \"workspace_id\": \"<uuid>\", \"data\": { }, \"recent\": [ ] }\n```\n\nTypes : `workspace.created`, `workspace.updated`, `workspace.deleted`,\n`column.created`, `column.updated`, `column.deleted`, `task.created`,\n`task.updated`, `task.deleted`, `user.updated`, `avatar.updated`,\n`avatar.deleted`. `workspace_id`, `data` et `recent` sont omis quand ils ne\ns'appliquent pas.\n\n## Types JSON\n\n- Identifiants : UUID en chaîne.\n- Dates : chaînes RFC 3339 (ex. `2026-09-25T14:03:00Z`).\n- Réponses : tous les champs sont présents (listés dans `required`). Ceux qui\n  peuvent valoir `null` portent `x-nullable: true` dans le schéma\n  (ex. `status`, `tag`, `updated_at`).\n- Bodies : un champ absent de `required` est optionnel.\n",
 	InfoInstanceName: "swagger",
 	SwaggerTemplate:  docTemplate,
 	LeftDelim:        "{{",

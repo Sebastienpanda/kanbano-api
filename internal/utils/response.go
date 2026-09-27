@@ -49,7 +49,7 @@ func RespondDeleted(w http.ResponseWriter) {
 type ErrorResponse struct {
 	Error string   `json:"error"`
 	Args  []string `json:"args"`
-}
+} // @name ErrorResponse
 
 func RespondError(w http.ResponseWriter, statusCode int, errorMessage string, args ...string) {
 	RespondJSON(w, statusCode, ErrorResponse{Error: errorMessage, Args: args})

@@ -28,7 +28,7 @@ type updateMeBody struct {
 
 type meResponse struct {
 	models.User
-	Avatar *models.AvatarSet `json:"avatar"`
+	Avatar *models.AvatarSet `json:"avatar" extensions:"x-nullable"`
 }
 
 func NewUserHandler(repo *repository.UserRepository, store *storage.Client, hub *ws.Hub) *UserHandler {
@@ -40,9 +40,10 @@ func NewUserHandler(repo *repository.UserRepository, store *storage.Client, hub 
 // @Tags user
 // @Produce json
 // @Success 200 {object} meResponse
-// @Failure 401 {object} utils.ErrorResponse
-// @Failure 404 {object} utils.ErrorResponse
-// @Failure 500 {object} utils.ErrorResponse
+// @Failure 401 {object} UnauthorizedResponse "Missing or invalid token (text/plain)"
+// @Failure 404 {object} ErrorResponse "user not found"
+// @Failure 429 {object} TooManyRequestsResponse "Rate limit exceeded (text/plain)"
+// @Failure 500 {object} InternalErrorResponse
 // @Security BearerAuth
 // @Router /me [get]
 func (h *UserHandler) Me(w http.ResponseWriter, r *http.Request) {
@@ -63,11 +64,12 @@ func (h *UserHandler) Me(w http.ResponseWriter, r *http.Request) {
 // @Produce json
 // @Param body body updateMeBody true "Fields to update"
 // @Success 200 {object} utils.UpdateResponse
-// @Failure 400 {object} utils.ErrorResponse
-// @Failure 401 {object} utils.ErrorResponse
-// @Failure 404 {object} utils.ErrorResponse
-// @Failure 422 {object} map[string]any
-// @Failure 500 {object} utils.ErrorResponse
+// @Failure 400 {object} BadRequestResponse "could not read body | could not decode body | errors: {field: message} (validation)"
+// @Failure 401 {object} UnauthorizedResponse "Missing or invalid token (text/plain)"
+// @Failure 404 {object} ErrorResponse "user not found"
+// @Failure 415 {object} UnsupportedMediaTypeResponse
+// @Failure 429 {object} TooManyRequestsResponse "Rate limit exceeded (text/plain)"
+// @Failure 500 {object} InternalErrorResponse
 // @Security BearerAuth
 // @Router /me [patch]
 func (h *UserHandler) UpdateMe(w http.ResponseWriter, r *http.Request) {
@@ -95,11 +97,12 @@ func (h *UserHandler) UpdateMe(w http.ResponseWriter, r *http.Request) {
 // @Produce json
 // @Param file formData file true "Avatar image"
 // @Success 200 {object} utils.UpdateResponse
-// @Failure 400 {object} utils.ErrorResponse
-// @Failure 401 {object} utils.ErrorResponse
-// @Failure 404 {object} utils.ErrorResponse
-// @Failure 500 {object} utils.ErrorResponse
-// @Failure 503 {object} utils.ErrorResponse
+// @Failure 400 {object} ErrorResponse "missing file | invalid image"
+// @Failure 401 {object} UnauthorizedResponse "Missing or invalid token (text/plain)"
+// @Failure 404 {object} ErrorResponse "user not found"
+// @Failure 429 {object} TooManyRequestsResponse "Rate limit exceeded (text/plain)"
+// @Failure 500 {object} InternalErrorResponse
+// @Failure 503 {object} ErrorResponse "avatar storage unavailable"
 // @Security BearerAuth
 // @Router /me/avatar [put]
 func (h *UserHandler) UploadAvatar(w http.ResponseWriter, r *http.Request) {
@@ -164,10 +167,11 @@ func (h *UserHandler) UploadAvatar(w http.ResponseWriter, r *http.Request) {
 // @Summary Delete the current user's avatar
 // @Tags user
 // @Success 204 "No Content"
-// @Failure 401 {object} utils.ErrorResponse
-// @Failure 404 {object} utils.ErrorResponse
-// @Failure 500 {object} utils.ErrorResponse
-// @Failure 503 {object} utils.ErrorResponse
+// @Failure 401 {object} UnauthorizedResponse "Missing or invalid token (text/plain)"
+// @Failure 404 {object} ErrorResponse "user not found"
+// @Failure 429 {object} TooManyRequestsResponse "Rate limit exceeded (text/plain)"
+// @Failure 500 {object} InternalErrorResponse
+// @Failure 503 {object} ErrorResponse "avatar storage unavailable"
 // @Security BearerAuth
 // @Router /me/avatar [delete]
 func (h *UserHandler) DeleteAvatar(w http.ResponseWriter, r *http.Request) {

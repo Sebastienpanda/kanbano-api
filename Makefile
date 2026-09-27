@@ -26,7 +26,7 @@ routes:
 	@go run ./cmd/routes
 
 swag:
-	swag init --requiredByDefault
+	swag init --requiredByDefault --markdownFiles docs/markdown
 
 # Scaffold de fichiers avec le bon package.
 #   make scaffold name=toto

@@ -1,17 +1,87 @@
 basePath: /api/v1
 definitions:
+  AdminForbiddenResponse:
+    enum:
+    - forbidden
+    type: string
+    x-enum-varnames:
+    - AdminForbidden
+  BadRequestResponse:
+    properties:
+      args:
+        items:
+          type: string
+        type: array
+      error:
+        example: could not decode body
+        type: string
+      errors:
+        additionalProperties:
+          type: string
+        example:
+          name: name est un champ obligatoire
+        type: object
+    type: object
+  ErrorResponse:
+    properties:
+      args:
+        items:
+          type: string
+        type: array
+      error:
+        type: string
+    required:
+    - args
+    - error
+    type: object
+  InternalErrorResponse:
+    properties:
+      args:
+        items:
+          type: string
+        type: array
+      error:
+        enum:
+        - internal server error
+        type: string
+    required:
+    - args
+    - error
+    type: object
+  TooManyRequestsResponse:
+    enum:
+    - too many requests
+    type: string
+    x-enum-varnames:
+    - TooManyRequests
+  UnauthorizedResponse:
+    enum:
+    - missing token
+    - invalid token
+    type: string
+    x-enum-varnames:
+    - UnauthorizedMissingToken
+    - UnauthorizedInvalidToken
+  UnsupportedMediaTypeResponse:
+    properties:
+      args:
+        items:
+          type: string
+        type: array
+      error:
+        enum:
+        - unexpected content-type
+        type: string
+    required:
+    - args
+    - error
+    type: object
   handler.assignTaskBody:
     properties:
       member_id:
         type: string
-      role:
-        enum:
-        - view
-        - edit
-        type: string
     required:
     - member_id
-    - role
     type: object
   handler.brevoEvent:
     properties:
@@ -63,6 +133,10 @@ definitions:
         minLength: 1
         type: string
       status:
+        enum:
+        - À faire
+        - En cours
+        - Terminé
         type: string
       tag_id:
         type: string
@@ -90,8 +164,8 @@ definitions:
         type: string
       role:
         enum:
-        - view
-        - edit
+        - admin
+        - member
         type: string
     required:
     - email
@@ -111,7 +185,9 @@ definitions:
   handler.meResponse:
     properties:
       avatar:
-        $ref: '#/definitions/models.AvatarSet'
+        allOf:
+        - $ref: '#/definitions/models.AvatarSet'
+        x-nullable: true
       avatar_updated_at:
         type: string
       created_at:
@@ -122,6 +198,7 @@ definitions:
         type: string
       name:
         type: string
+        x-nullable: true
     required:
     - avatar
     - created_at
@@ -132,7 +209,9 @@ definitions:
   handler.memberProfileResponse:
     properties:
       avatar:
-        $ref: '#/definitions/models.AvatarSet'
+        allOf:
+        - $ref: '#/definitions/models.AvatarSet'
+        x-nullable: true
       email:
         type: string
       id:
@@ -140,6 +219,10 @@ definitions:
       name:
         type: string
       role:
+        enum:
+        - owner
+        - admin
+        - member
         type: string
       workspaces:
         items:
@@ -156,14 +239,21 @@ definitions:
   handler.memberResponse:
     properties:
       avatar:
-        $ref: '#/definitions/models.AvatarSet'
+        allOf:
+        - $ref: '#/definitions/models.AvatarSet'
+        x-nullable: true
       id:
         type: string
       joined_at:
         type: string
+        x-nullable: true
       name:
         type: string
       role:
+        enum:
+        - owner
+        - admin
+        - member
         type: string
     required:
     - avatar
@@ -180,16 +270,52 @@ definitions:
         items:
           $ref: '#/definitions/handler.memberResponse'
         type: array
+      name:
+        type: string
+      role:
+        enum:
+        - owner
+        - admin
+        - member
+        type: string
       user_id:
         type: string
     required:
     - id
     - members
+    - name
+    - role
     - user_id
     type: object
   handler.roleResponse:
     properties:
       role:
+        enum:
+        - owner
+        - admin
+        - member
+        - view
+        - edit
+        type: string
+    required:
+    - role
+    type: object
+  handler.setMemberRoleBody:
+    properties:
+      role:
+        enum:
+        - admin
+        - member
+        type: string
+    required:
+    - role
+    type: object
+  handler.setTaskGuestRoleBody:
+    properties:
+      role:
+        enum:
+        - view
+        - edit
         type: string
     required:
     - role
@@ -214,6 +340,7 @@ definitions:
         minLength: 1
         type: string
       position:
+        maximum: 2147483647
         minimum: 0
         type: integer
     type: object
@@ -231,6 +358,15 @@ definitions:
     properties:
       name:
         maxLength: 100
+        minLength: 1
+        type: string
+    required:
+    - name
+    type: object
+  handler.updateOrganisationBody:
+    properties:
+      name:
+        maxLength: 255
         minLength: 1
         type: string
     required:
@@ -256,9 +392,14 @@ definitions:
         minLength: 1
         type: string
       position:
+        maximum: 2147483647
         minimum: 0
         type: integer
       status:
+        enum:
+        - À faire
+        - En cours
+        - Terminé
         type: string
       tag_id:
         type: string
@@ -283,21 +424,57 @@ definitions:
       description:
         maxLength: 2000
         type: string
+      members:
+        items:
+          $ref: '#/definitions/handler.updateWorkspaceMemberBody'
+        type: array
+        uniqueItems: true
       name:
         maxLength: 100
         minLength: 1
         type: string
     type: object
+  handler.updateWorkspaceMemberBody:
+    properties:
+      id:
+        type: string
+      role:
+        enum:
+        - view
+        - edit
+        type: string
+      visibility:
+        enum:
+        - private
+        - public
+        type: string
+    required:
+    - id
+    type: object
   models.AbilityRule:
     properties:
       action:
+        enum:
+        - read
+        - create
+        - update
+        - delete
+        - share
+        - assign
+        - invite
         type: string
       conditions:
         additionalProperties: {}
         type: object
-      inverted:
-        type: boolean
+      fields:
+        items:
+          type: string
+        type: array
       subject:
+        enum:
+        - Workspace
+        - Column
+        - Task
         type: string
     required:
     - action
@@ -357,6 +534,7 @@ definitions:
         type: array
       updated_at:
         type: string
+        x-nullable: true
     required:
     - created_at
     - created_by
@@ -408,9 +586,18 @@ definitions:
         type: string
       responded_at:
         type: string
+        x-nullable: true
       role:
+        enum:
+        - admin
+        - member
         type: string
+        x-nullable: true
       status:
+        enum:
+        - pending
+        - accepted
+        - declined
         type: string
     required:
     - created_at
@@ -422,24 +609,48 @@ definitions:
     - role
     - status
     type: object
+  models.OrganisationSummary:
+    properties:
+      id:
+        type: string
+      name:
+        type: string
+      role:
+        enum:
+        - owner
+        - admin
+        - member
+        type: string
+      user_id:
+        type: string
+    required:
+    - id
+    - name
+    - role
+    - user_id
+    type: object
   models.Tag:
     properties:
       color:
         type: string
+        x-nullable: true
       created_at:
         type: string
       created_by:
         type: string
       deleted_by:
         type: string
+        x-nullable: true
       id:
         type: string
       name:
         type: string
       updated_at:
         type: string
+        x-nullable: true
       updated_by:
         type: string
+        x-nullable: true
     required:
     - color
     - created_at
@@ -454,6 +665,7 @@ definitions:
     properties:
       color:
         type: string
+        x-nullable: true
       id:
         type: string
       name:
@@ -466,7 +678,9 @@ definitions:
   models.TaskAssignedUser:
     properties:
       avatar:
-        $ref: '#/definitions/models.AvatarSet'
+        allOf:
+        - $ref: '#/definitions/models.AvatarSet'
+        x-nullable: true
       email:
         type: string
       id:
@@ -482,15 +696,16 @@ definitions:
         type: string
       id:
         type: string
+      is_guest:
+        type: boolean
       name:
         type: string
-      role:
-        type: string
+        x-nullable: true
     required:
     - email
     - id
+    - is_guest
     - name
-    - role
     type: object
   models.TaskGuest:
     properties:
@@ -498,23 +713,35 @@ definitions:
         type: string
       email:
         type: string
+      expires_at:
+        type: string
       id:
         type: string
       invited_by:
         type: string
       responded_at:
         type: string
+        x-nullable: true
       role:
+        enum:
+        - view
+        - edit
         type: string
       status:
+        enum:
+        - pending
+        - accepted
+        - declined
         type: string
       task_id:
         type: string
       user_id:
         type: string
+        x-nullable: true
     required:
     - created_at
     - email
+    - expires_at
     - id
     - invited_by
     - responded_at
@@ -528,6 +755,9 @@ definitions:
       column_id:
         type: string
       role:
+        enum:
+        - view
+        - edit
         type: string
       task_id:
         type: string
@@ -550,6 +780,7 @@ definitions:
         type: string
       description:
         type: string
+        x-nullable: true
       id:
         type: string
       name:
@@ -557,13 +788,22 @@ definitions:
       position:
         type: integer
       status:
+        enum:
+        - À faire
+        - En cours
+        - Terminé
         type: string
+        x-nullable: true
       tag:
-        $ref: '#/definitions/models.TagName'
+        allOf:
+        - $ref: '#/definitions/models.TagName'
+        x-nullable: true
       tag_id:
         type: string
+        x-nullable: true
       updated_at:
         type: string
+        x-nullable: true
     required:
     - assigned_users
     - column_id
@@ -586,10 +826,13 @@ definitions:
         type: string
       deleted_at:
         type: string
+        x-nullable: true
       deleted_by:
         type: string
+        x-nullable: true
       description:
         type: string
+        x-nullable: true
       id:
         type: string
       name:
@@ -598,8 +841,10 @@ definitions:
         type: string
       updated_at:
         type: string
+        x-nullable: true
       updated_by:
         type: string
+        x-nullable: true
     required:
     - created_at
     - created_by
@@ -622,19 +867,70 @@ definitions:
         type: string
       description:
         type: string
+        x-nullable: true
       id:
         type: string
+      members:
+        items:
+          $ref: '#/definitions/models.WorkspaceMember'
+        type: array
       name:
+        type: string
+      organisation_id:
         type: string
       updated_at:
         type: string
+        x-nullable: true
     required:
     - columns
     - created_at
     - description
     - id
+    - members
     - name
+    - organisation_id
     - updated_at
+    type: object
+  models.WorkspaceMember:
+    properties:
+      avatar:
+        allOf:
+        - $ref: '#/definitions/models.AvatarSet'
+        x-nullable: true
+      email:
+        type: string
+      id:
+        type: string
+      name:
+        type: string
+        x-nullable: true
+      organisation_role:
+        enum:
+        - admin
+        - member
+        type: string
+      role:
+        enum:
+        - view
+        - edit
+        type: string
+    required:
+    - avatar
+    - email
+    - id
+    - name
+    - organisation_role
+    - role
+    type: object
+  models.WorkspaceName:
+    properties:
+      id:
+        type: string
+      name:
+        type: string
+    required:
+    - id
+    - name
     type: object
   models.WorkspaceRole:
     properties:
@@ -645,8 +941,14 @@ definitions:
       name:
         type: string
       role:
+        enum:
+        - view
+        - edit
         type: string
       visibility:
+        enum:
+        - private
+        - public
         type: string
     required:
     - created_at
@@ -654,6 +956,20 @@ definitions:
     - name
     - role
     - visibility
+    type: object
+  models.WorkspaceSearchResult:
+    properties:
+      description:
+        type: string
+        x-nullable: true
+      id:
+        type: string
+      name:
+        type: string
+    required:
+    - description
+    - id
+    - name
     type: object
   utils.CreateResponse:
     properties:
@@ -663,18 +979,6 @@ definitions:
         type: string
     required:
     - status
-    type: object
-  utils.ErrorResponse:
-    properties:
-      args:
-        items:
-          type: string
-        type: array
-      error:
-        type: string
-    required:
-    - args
-    - error
     type: object
   utils.UpdateResponse:
     properties:
@@ -686,11 +990,167 @@ definitions:
 host: localhost:3000
 info:
   contact: {}
-  description: REST API for the Kanbano kanban application (workspaces, columns, tasks,
-    tags, organisations, users).
+  description: |
+    REST API de l'application kanban Kanbano (workspaces, colonnes, tâches, tags,
+    organisations, utilisateurs).
+
+    Conventions communes à toutes les routes ci-dessous. Pour chaque route, la
+    description de chaque code d'erreur liste les valeurs possibles de `error`,
+    séparées par ` | `.
+
+    # Conventions
+
+    ## URL et authentification
+
+    - Toutes les routes métier sont sous `/api/v1` (ex. `GET /api/v1/workspaces`).
+    - Authentification : header `Authorization: Bearer <JWT Neon Auth>`.
+      L'utilisateur courant est déduit du token : aucune route n'attend son ID
+      dans le body ou l'URL.
+    - WebSocket `GET /api/v1/ws` : le token passe dans le header
+      `Sec-WebSocket-Protocol: bearer, <token>` (pas dans `Authorization`).
+    - Rate limit par IP : 10 requêtes/s, rafale de 30.
+    - Hors `/api/v1` : `GET /health` et `POST /webhooks/brevo` (non destinés au front).
+
+    ## Corps de requête
+
+    - Header `Content-Type: application/json` obligatoire, **valeur exacte**
+      (`application/json; charset=utf-8` est refusé) → sinon `415`.
+    - Les champs inconnus sont refusés → `400 {"error":"could not decode body"}`.
+    - Un JSON mal formé ou un type incorrect (ex. nombre au lieu de chaîne)
+      → `400 {"error":"could not decode body"}`.
+    - PATCH : seuls les champs envoyés sont modifiés ; un champ absent est ignoré.
+
+    ## Réponses de succès
+
+    | Cas | Statut | Corps |
+    |---|---|---|
+    | Lecture | `200` | la ressource ou un tableau (schéma indiqué sur chaque route) |
+    | Création | `201` | `{"id": "<uuid>", "status": "created"}` |
+    | Modification | `200` | `{"status": "updated"}` |
+    | Suppression | `204` | aucun corps |
+
+    Après une création ou une modification, le front doit relire la ressource
+    (ou s'appuyer sur l'événement WebSocket) : la réponse ne la renvoie pas.
+
+    ## Format des erreurs
+
+    ### Erreur standard (JSON)
+
+    ```json
+    { "error": "workspace not found", "args": null }
+    ```
+
+    - `error` : message en anglais, stable, utilisable comme clé de traduction.
+    - `args` : paramètres éventuels du message, `null` le plus souvent.
+
+    ### Erreur de validation du body — `400`
+
+    ```json
+    { "errors": { "name": "<message en français>", "email": "<message en français>" } }
+    ```
+
+    - Clé = nom JSON du champ, valeur = message déjà traduit **en français**.
+    - Pour un tableau d'objets (ex. `members[].role`), la clé est le nom du champ
+      seul (`role`), sans l'index.
+    - Les règles de validation de chaque champ sont dans le schéma du body :
+      `required`, `minLength`, `maxLength`, `enum`, `format`…
+    - Distinguer les deux formats d'erreur `400` par la présence de `errors`
+      (validation) ou de `error` (autre erreur) : c'est le schéma
+      `BadRequestResponse`.
+    - Un `422` n'existe que pour un `status` de tâche invalide
+      (`{"error":"invalid status"}`).
+
+    ### Erreurs en texte brut (pas du JSON)
+
+    Ces erreurs sortent des middlewares, avant les handlers, en `text/plain` :
+
+    | Statut | Corps | Cause |
+    |---|---|---|
+    | `401` | `missing token` | header `Authorization` absent ou sans `Bearer ` |
+    | `401` | `invalid token` | token expiré, mal signé ou invalide |
+    | `429` | `too many requests` | rate limit dépassé |
+
+    Le front ne doit donc pas parser le corps en JSON sur un `401` ou un `429`.
+
+    ## Sens des codes d'erreur
+
+    | Statut | Signification |
+    |---|---|
+    | `400` | requête invalide : UUID mal formé dans l'URL (`invalid id`, `invalid columnId`…), `limit`/`offset` invalide, body illisible ou validation échouée |
+    | `401` | pas authentifié (voir ci-dessus) : rediriger vers la connexion |
+    | `403` | la ressource est visible, mais le rôle de l'utilisateur ne permet pas cette action (ex. `organisation owner or admin required`) |
+    | `404` | la ressource n'existe pas, a été supprimée, **ou l'utilisateur n'y a pas accès** |
+    | `409` | conflit (ex. `an invitation is already pending for this email`) |
+    | `415` | `Content-Type` absent ou différent de `application/json` |
+    | `422` | valeur refusée par une règle métier (ex. `invalid status`) |
+    | `429` | rate limit |
+    | `500` | erreur serveur : `{"error":"internal server error"}` |
+
+    ### 404 plutôt que 403
+
+    Un workspace (et ce qu'il contient) auquel l'utilisateur n'a pas accès répond
+    `404`, jamais `403` : l'API ne révèle pas l'existence d'une ressource
+    invisible. Côté front, un `404` sur une ressource affichée juste avant signifie
+    le plus souvent qu'elle a été supprimée ou que l'accès a été retiré : retirer
+    la ressource de l'état local et revenir à la liste.
+
+    ## Rôles
+
+    - Organisation : `owner` (unique, créateur), `admin`, `member`.
+    - Workspace : accès `view` (lecture seule) ou `edit` (colonnes et tâches).
+    - Les droits effectifs sur un workspace sont renvoyés sous forme de règles
+      CASL par `GET /api/v1/workspaces/{id}/abilities` : le front
+      doit s'appuyer sur ces règles plutôt que de recalculer les droits.
+
+    ## Pagination
+
+    Routes paginées : query `limit` (défaut 50, max 200, au-delà ramené à 200) et
+    `offset` (défaut 0). Une valeur non entière ou négative → `400`.
+
+    ## Temps réel (WebSocket)
+
+    Chaque message reçu a la forme :
+
+    ```json
+    { "type": "task.updated", "workspace_id": "<uuid>", "data": { }, "recent": [ ] }
+    ```
+
+    Types : `workspace.created`, `workspace.updated`, `workspace.deleted`,
+    `column.created`, `column.updated`, `column.deleted`, `task.created`,
+    `task.updated`, `task.deleted`, `user.updated`, `avatar.updated`,
+    `avatar.deleted`. `workspace_id`, `data` et `recent` sont omis quand ils ne
+    s'appliquent pas.
+
+    ## Types JSON
+
+    - Identifiants : UUID en chaîne.
+    - Dates : chaînes RFC 3339 (ex. `2026-09-25T14:03:00Z`).
+    - Réponses : tous les champs sont présents (listés dans `required`). Ceux qui
+      peuvent valoir `null` portent `x-nullable: true` dans le schéma
+      (ex. `status`, `tag`, `updated_at`).
+    - Bodies : un champ absent de `required` est optionnel.
   title: Kanbano API
   version: "1.0"
 paths:
+  /../health:
+    get:
+      description: Always answers 200 while the process is up; does not ping the database.
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+        "429":
+          description: Rate limit exceeded (text/plain)
+          schema:
+            $ref: '#/definitions/TooManyRequestsResponse'
+      summary: Liveness probe
+      tags:
+      - health
   /../webhooks/brevo:
     post:
       consumes:
@@ -719,24 +1179,28 @@ paths:
               type: string
             type: object
         "400":
-          description: Bad Request
+          description: could not decode body
           schema:
-            $ref: '#/definitions/utils.ErrorResponse'
+            $ref: '#/definitions/ErrorResponse'
         "401":
-          description: Unauthorized
+          description: unauthorized
           schema:
-            $ref: '#/definitions/utils.ErrorResponse'
-        "415":
-          description: Unsupported Media Type
+            $ref: '#/definitions/ErrorResponse'
+        "429":
+          description: Rate limit exceeded (text/plain)
           schema:
-            $ref: '#/definitions/utils.ErrorResponse'
+            $ref: '#/definitions/TooManyRequestsResponse'
       summary: Brevo transactional email webhook
       tags:
       - brevo
   /admin/logs:
     get:
       parameters:
-      - description: info, warning or error
+      - description: Log level
+        enum:
+        - info
+        - warning
+        - error
         in: query
         name: level
         type: string
@@ -758,21 +1222,25 @@ paths:
               $ref: '#/definitions/models.Log'
             type: array
         "400":
-          description: Bad Request
+          description: invalid level | invalid limit | invalid offset
           schema:
-            $ref: '#/definitions/utils.ErrorResponse'
+            $ref: '#/definitions/ErrorResponse'
         "401":
-          description: Unauthorized
+          description: Missing or invalid token (text/plain)
           schema:
-            $ref: '#/definitions/utils.ErrorResponse'
+            $ref: '#/definitions/UnauthorizedResponse'
         "403":
-          description: Forbidden
+          description: Caller is not an administrator (text/plain)
           schema:
-            $ref: '#/definitions/utils.ErrorResponse'
+            $ref: '#/definitions/AdminForbiddenResponse'
+        "429":
+          description: Rate limit exceeded (text/plain)
+          schema:
+            $ref: '#/definitions/TooManyRequestsResponse'
         "500":
           description: Internal Server Error
           schema:
-            $ref: '#/definitions/utils.ErrorResponse'
+            $ref: '#/definitions/InternalErrorResponse'
       security:
       - BearerAuth: []
       summary: List request/error logs (admin only)
@@ -782,6 +1250,11 @@ paths:
     patch:
       consumes:
       - application/json
+      description: Once accepted, the guest sees the task and appears among its assignees.
+        An expired invitation can no longer be accepted (410); its author may resend
+        it. Only pending invitations can be answered (404 otherwise). 409 if the caller
+        is already a guest of the task, or has joined the task's organisation since
+        the invitation was sent.
       parameters:
       - description: Invitation ID
         in: path
@@ -802,33 +1275,93 @@ paths:
           schema:
             $ref: '#/definitions/utils.UpdateResponse'
         "400":
-          description: Bad Request
+          description: 'invalid id | could not read body | could not decode body |
+            errors: {field: message} (validation)'
           schema:
-            $ref: '#/definitions/utils.ErrorResponse'
+            $ref: '#/definitions/BadRequestResponse'
         "401":
-          description: Unauthorized
+          description: Missing or invalid token (text/plain)
           schema:
-            $ref: '#/definitions/utils.ErrorResponse'
+            $ref: '#/definitions/UnauthorizedResponse'
         "404":
-          description: Not Found
+          description: user not found | invitation not found
           schema:
-            $ref: '#/definitions/utils.ErrorResponse'
-        "422":
-          description: Unprocessable Entity
+            $ref: '#/definitions/ErrorResponse'
+        "409":
+          description: you already have access to this task
           schema:
-            additionalProperties: true
-            type: object
+            $ref: '#/definitions/ErrorResponse'
+        "410":
+          description: invitation expired
+          schema:
+            $ref: '#/definitions/ErrorResponse'
+        "415":
+          description: Unsupported Media Type
+          schema:
+            $ref: '#/definitions/UnsupportedMediaTypeResponse'
+        "429":
+          description: Rate limit exceeded (text/plain)
+          schema:
+            $ref: '#/definitions/TooManyRequestsResponse'
         "500":
           description: Internal Server Error
           schema:
-            $ref: '#/definitions/utils.ErrorResponse'
+            $ref: '#/definitions/InternalErrorResponse'
       security:
       - BearerAuth: []
       summary: Accept or decline a task guest invitation
       tags:
       - task
+  /guest-invitations/{id}/resend:
+    post:
+      description: Sends the invitation email again and gives the invitation 7 more
+        days from now, expired or not. Allowed for the author of the invitation only,
+        as long as they may still invite guests on the workspace.
+      parameters:
+      - description: Invitation ID
+        in: path
+        name: id
+        required: true
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/utils.UpdateResponse'
+        "400":
+          description: invalid id
+          schema:
+            $ref: '#/definitions/ErrorResponse'
+        "401":
+          description: Missing or invalid token (text/plain)
+          schema:
+            $ref: '#/definitions/UnauthorizedResponse'
+        "403":
+          description: organisation owner or admin required
+          schema:
+            $ref: '#/definitions/ErrorResponse'
+        "404":
+          description: invitation not found
+          schema:
+            $ref: '#/definitions/ErrorResponse'
+        "429":
+          description: Rate limit exceeded (text/plain)
+          schema:
+            $ref: '#/definitions/TooManyRequestsResponse'
+        "500":
+          description: Internal Server Error
+          schema:
+            $ref: '#/definitions/InternalErrorResponse'
+      security:
+      - BearerAuth: []
+      summary: Resend a task guest invitation
+      tags:
+      - task
   /guest-invitations/received:
     get:
+      description: Returns the pending invitations that have not expired.
       parameters:
       - description: Page size (default 50, max 200)
         in: query
@@ -848,21 +1381,25 @@ paths:
               $ref: '#/definitions/models.TaskGuest'
             type: array
         "400":
-          description: Bad Request
+          description: invalid limit | invalid offset
           schema:
-            $ref: '#/definitions/utils.ErrorResponse'
+            $ref: '#/definitions/ErrorResponse'
         "401":
-          description: Unauthorized
+          description: Missing or invalid token (text/plain)
           schema:
-            $ref: '#/definitions/utils.ErrorResponse'
+            $ref: '#/definitions/UnauthorizedResponse'
         "404":
-          description: Not Found
+          description: user not found
           schema:
-            $ref: '#/definitions/utils.ErrorResponse'
+            $ref: '#/definitions/ErrorResponse'
+        "429":
+          description: Rate limit exceeded (text/plain)
+          schema:
+            $ref: '#/definitions/TooManyRequestsResponse'
         "500":
           description: Internal Server Error
           schema:
-            $ref: '#/definitions/utils.ErrorResponse'
+            $ref: '#/definitions/InternalErrorResponse'
       security:
       - BearerAuth: []
       summary: List task guest invitations received by the current user
@@ -878,17 +1415,21 @@ paths:
           schema:
             $ref: '#/definitions/handler.meResponse'
         "401":
-          description: Unauthorized
+          description: Missing or invalid token (text/plain)
           schema:
-            $ref: '#/definitions/utils.ErrorResponse'
+            $ref: '#/definitions/UnauthorizedResponse'
         "404":
-          description: Not Found
+          description: user not found
           schema:
-            $ref: '#/definitions/utils.ErrorResponse'
+            $ref: '#/definitions/ErrorResponse'
+        "429":
+          description: Rate limit exceeded (text/plain)
+          schema:
+            $ref: '#/definitions/TooManyRequestsResponse'
         "500":
           description: Internal Server Error
           schema:
-            $ref: '#/definitions/utils.ErrorResponse'
+            $ref: '#/definitions/InternalErrorResponse'
       security:
       - BearerAuth: []
       summary: Get the current user
@@ -912,26 +1453,30 @@ paths:
           schema:
             $ref: '#/definitions/utils.UpdateResponse'
         "400":
-          description: Bad Request
+          description: 'could not read body | could not decode body | errors: {field:
+            message} (validation)'
           schema:
-            $ref: '#/definitions/utils.ErrorResponse'
+            $ref: '#/definitions/BadRequestResponse'
         "401":
-          description: Unauthorized
+          description: Missing or invalid token (text/plain)
           schema:
-            $ref: '#/definitions/utils.ErrorResponse'
+            $ref: '#/definitions/UnauthorizedResponse'
         "404":
-          description: Not Found
+          description: user not found
           schema:
-            $ref: '#/definitions/utils.ErrorResponse'
-        "422":
-          description: Unprocessable Entity
+            $ref: '#/definitions/ErrorResponse'
+        "415":
+          description: Unsupported Media Type
           schema:
-            additionalProperties: true
-            type: object
+            $ref: '#/definitions/UnsupportedMediaTypeResponse'
+        "429":
+          description: Rate limit exceeded (text/plain)
+          schema:
+            $ref: '#/definitions/TooManyRequestsResponse'
         "500":
           description: Internal Server Error
           schema:
-            $ref: '#/definitions/utils.ErrorResponse'
+            $ref: '#/definitions/InternalErrorResponse'
       security:
       - BearerAuth: []
       summary: Update the current user
@@ -943,21 +1488,25 @@ paths:
         "204":
           description: No Content
         "401":
-          description: Unauthorized
+          description: Missing or invalid token (text/plain)
           schema:
-            $ref: '#/definitions/utils.ErrorResponse'
+            $ref: '#/definitions/UnauthorizedResponse'
         "404":
-          description: Not Found
+          description: user not found
           schema:
-            $ref: '#/definitions/utils.ErrorResponse'
+            $ref: '#/definitions/ErrorResponse'
+        "429":
+          description: Rate limit exceeded (text/plain)
+          schema:
+            $ref: '#/definitions/TooManyRequestsResponse'
         "500":
           description: Internal Server Error
           schema:
-            $ref: '#/definitions/utils.ErrorResponse'
+            $ref: '#/definitions/InternalErrorResponse'
         "503":
-          description: Service Unavailable
+          description: avatar storage unavailable
           schema:
-            $ref: '#/definitions/utils.ErrorResponse'
+            $ref: '#/definitions/ErrorResponse'
       security:
       - BearerAuth: []
       summary: Delete the current user's avatar
@@ -982,109 +1531,42 @@ paths:
           schema:
             $ref: '#/definitions/utils.UpdateResponse'
         "400":
-          description: Bad Request
+          description: missing file | invalid image
           schema:
-            $ref: '#/definitions/utils.ErrorResponse'
+            $ref: '#/definitions/ErrorResponse'
         "401":
-          description: Unauthorized
+          description: Missing or invalid token (text/plain)
           schema:
-            $ref: '#/definitions/utils.ErrorResponse'
+            $ref: '#/definitions/UnauthorizedResponse'
         "404":
-          description: Not Found
+          description: user not found
           schema:
-            $ref: '#/definitions/utils.ErrorResponse'
+            $ref: '#/definitions/ErrorResponse'
+        "429":
+          description: Rate limit exceeded (text/plain)
+          schema:
+            $ref: '#/definitions/TooManyRequestsResponse'
         "500":
           description: Internal Server Error
           schema:
-            $ref: '#/definitions/utils.ErrorResponse'
+            $ref: '#/definitions/InternalErrorResponse'
         "503":
-          description: Service Unavailable
+          description: avatar storage unavailable
           schema:
-            $ref: '#/definitions/utils.ErrorResponse'
+            $ref: '#/definitions/ErrorResponse'
       security:
       - BearerAuth: []
       summary: Upload the current user's avatar
       tags:
       - user
-  /organisation:
-    get:
-      produces:
-      - application/json
-      responses:
-        "200":
-          description: OK
-          schema:
-            $ref: '#/definitions/handler.organisationResponse'
-        "401":
-          description: Unauthorized
-          schema:
-            $ref: '#/definitions/utils.ErrorResponse'
-        "404":
-          description: Not Found
-          schema:
-            $ref: '#/definitions/utils.ErrorResponse'
-        "500":
-          description: Internal Server Error
-          schema:
-            $ref: '#/definitions/utils.ErrorResponse'
-      security:
-      - BearerAuth: []
-      summary: Get the current user's organisation
-      tags:
-      - organisation
-  /organisation/invitations:
-    post:
-      consumes:
-      - application/json
-      description: Sends an organisation-level invitation by email.
-      parameters:
-      - description: Invitation to create
-        in: body
-        name: body
-        required: true
-        schema:
-          $ref: '#/definitions/handler.inviteBody'
-      produces:
-      - application/json
-      responses:
-        "201":
-          description: Created
-          schema:
-            $ref: '#/definitions/utils.CreateResponse'
-        "400":
-          description: Bad Request
-          schema:
-            $ref: '#/definitions/utils.ErrorResponse'
-        "401":
-          description: Unauthorized
-          schema:
-            $ref: '#/definitions/utils.ErrorResponse'
-        "404":
-          description: Not Found
-          schema:
-            $ref: '#/definitions/utils.ErrorResponse'
-        "409":
-          description: Conflict
-          schema:
-            $ref: '#/definitions/utils.ErrorResponse'
-        "422":
-          description: Unprocessable Entity
-          schema:
-            additionalProperties: true
-            type: object
-        "500":
-          description: Internal Server Error
-          schema:
-            $ref: '#/definitions/utils.ErrorResponse'
-      security:
-      - BearerAuth: []
-      summary: Invite a member
-      tags:
-      - organization
-  /organisation/invitations/{id}:
+  /organisation-invitations/{id}:
     patch:
       consumes:
       - application/json
+      description: Accepting makes the caller an admin or member of the organisation.
+        Their guest accesses on tasks of that organisation are removed and replaced
+        by access to the tasks' workspaces, with the guest role ('edit' if they had
+        it on at least one task of the workspace).
       parameters:
       - description: Invitation ID
         in: path
@@ -1105,32 +1587,36 @@ paths:
           schema:
             $ref: '#/definitions/utils.UpdateResponse'
         "400":
-          description: Bad Request
+          description: 'invalid id | could not read body | could not decode body |
+            errors: {field: message} (validation)'
           schema:
-            $ref: '#/definitions/utils.ErrorResponse'
+            $ref: '#/definitions/BadRequestResponse'
         "401":
-          description: Unauthorized
+          description: Missing or invalid token (text/plain)
           schema:
-            $ref: '#/definitions/utils.ErrorResponse'
+            $ref: '#/definitions/UnauthorizedResponse'
         "404":
-          description: Not Found
+          description: user not found | invitation not found
           schema:
-            $ref: '#/definitions/utils.ErrorResponse'
-        "422":
-          description: Unprocessable Entity
+            $ref: '#/definitions/ErrorResponse'
+        "415":
+          description: Unsupported Media Type
           schema:
-            additionalProperties: true
-            type: object
+            $ref: '#/definitions/UnsupportedMediaTypeResponse'
+        "429":
+          description: Rate limit exceeded (text/plain)
+          schema:
+            $ref: '#/definitions/TooManyRequestsResponse'
         "500":
           description: Internal Server Error
           schema:
-            $ref: '#/definitions/utils.ErrorResponse'
+            $ref: '#/definitions/InternalErrorResponse'
       security:
       - BearerAuth: []
-      summary: Accept or decline an invitation
+      summary: Accept or decline an organisation invitation
       tags:
       - organisation
-  /organisation/invitations/received:
+  /organisation-invitations/received:
     get:
       parameters:
       - description: Page size (default 50, max 200)
@@ -1151,29 +1637,211 @@ paths:
               $ref: '#/definitions/models.OrganisationInvitation'
             type: array
         "400":
-          description: Bad Request
+          description: invalid limit | invalid offset
           schema:
-            $ref: '#/definitions/utils.ErrorResponse'
+            $ref: '#/definitions/ErrorResponse'
         "401":
-          description: Unauthorized
+          description: Missing or invalid token (text/plain)
           schema:
-            $ref: '#/definitions/utils.ErrorResponse'
+            $ref: '#/definitions/UnauthorizedResponse'
         "404":
-          description: Not Found
+          description: user not found
           schema:
-            $ref: '#/definitions/utils.ErrorResponse'
+            $ref: '#/definitions/ErrorResponse'
+        "429":
+          description: Rate limit exceeded (text/plain)
+          schema:
+            $ref: '#/definitions/TooManyRequestsResponse'
         "500":
           description: Internal Server Error
           schema:
-            $ref: '#/definitions/utils.ErrorResponse'
+            $ref: '#/definitions/InternalErrorResponse'
       security:
       - BearerAuth: []
-      summary: List invitations received by the current user
+      summary: List organisation invitations received by the current user
       tags:
       - organisation
-  /organisation/invitations/sent:
+  /organisations:
     get:
+      description: Returns the organisations the caller owns (first, at most one)
+        or belongs to as admin or member, with their role in each.
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            items:
+              $ref: '#/definitions/models.OrganisationSummary'
+            type: array
+        "401":
+          description: Missing or invalid token (text/plain)
+          schema:
+            $ref: '#/definitions/UnauthorizedResponse'
+        "429":
+          description: Rate limit exceeded (text/plain)
+          schema:
+            $ref: '#/definitions/TooManyRequestsResponse'
+        "500":
+          description: Internal Server Error
+          schema:
+            $ref: '#/definitions/InternalErrorResponse'
+      security:
+      - BearerAuth: []
+      summary: List the caller's organisations
+      tags:
+      - organisation
+  /organisations/{orgId}:
+    delete:
+      description: 'Soft-deletes the organisation with all its workspaces, columns
+        and tasks: nobody sees them anymore. The owner does not get a new organisation,
+        so they can no longer create workspaces. Allowed for the organisation owner
+        only.'
       parameters:
+      - description: Organisation ID
+        in: path
+        name: orgId
+        required: true
+        type: string
+      responses:
+        "204":
+          description: No Content
+        "400":
+          description: invalid orgId
+          schema:
+            $ref: '#/definitions/ErrorResponse'
+        "401":
+          description: Missing or invalid token (text/plain)
+          schema:
+            $ref: '#/definitions/UnauthorizedResponse'
+        "403":
+          description: organisation owner required
+          schema:
+            $ref: '#/definitions/ErrorResponse'
+        "404":
+          description: organisation not found
+          schema:
+            $ref: '#/definitions/ErrorResponse'
+        "429":
+          description: Rate limit exceeded (text/plain)
+          schema:
+            $ref: '#/definitions/TooManyRequestsResponse'
+        "500":
+          description: Internal Server Error
+          schema:
+            $ref: '#/definitions/InternalErrorResponse'
+      security:
+      - BearerAuth: []
+      summary: Delete an organisation
+      tags:
+      - organisation
+    get:
+      description: Returns the organisation, the caller's role in it and its members,
+        the owner first. Visible to every person of the organisation.
+      parameters:
+      - description: Organisation ID
+        in: path
+        name: orgId
+        required: true
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/handler.organisationResponse'
+        "400":
+          description: invalid orgId
+          schema:
+            $ref: '#/definitions/ErrorResponse'
+        "401":
+          description: Missing or invalid token (text/plain)
+          schema:
+            $ref: '#/definitions/UnauthorizedResponse'
+        "404":
+          description: organisation not found
+          schema:
+            $ref: '#/definitions/ErrorResponse'
+        "429":
+          description: Rate limit exceeded (text/plain)
+          schema:
+            $ref: '#/definitions/TooManyRequestsResponse'
+        "500":
+          description: Internal Server Error
+          schema:
+            $ref: '#/definitions/InternalErrorResponse'
+      security:
+      - BearerAuth: []
+      summary: Get an organisation
+      tags:
+      - organisation
+    patch:
+      consumes:
+      - application/json
+      description: Allowed for the organisation owner only.
+      parameters:
+      - description: Organisation ID
+        in: path
+        name: orgId
+        required: true
+        type: string
+      - description: New name
+        in: body
+        name: body
+        required: true
+        schema:
+          $ref: '#/definitions/handler.updateOrganisationBody'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/utils.UpdateResponse'
+        "400":
+          description: 'invalid orgId | could not read body | could not decode body
+            | errors: {field: message} (validation)'
+          schema:
+            $ref: '#/definitions/BadRequestResponse'
+        "401":
+          description: Missing or invalid token (text/plain)
+          schema:
+            $ref: '#/definitions/UnauthorizedResponse'
+        "403":
+          description: organisation owner required
+          schema:
+            $ref: '#/definitions/ErrorResponse'
+        "404":
+          description: organisation not found
+          schema:
+            $ref: '#/definitions/ErrorResponse'
+        "415":
+          description: Unsupported Media Type
+          schema:
+            $ref: '#/definitions/UnsupportedMediaTypeResponse'
+        "429":
+          description: Rate limit exceeded (text/plain)
+          schema:
+            $ref: '#/definitions/TooManyRequestsResponse'
+        "500":
+          description: Internal Server Error
+          schema:
+            $ref: '#/definitions/InternalErrorResponse'
+      security:
+      - BearerAuth: []
+      summary: Rename an organisation
+      tags:
+      - organisation
+  /organisations/{orgId}/invitations:
+    get:
+      description: Allowed for the organisation owner only.
+      parameters:
+      - description: Organisation ID
+        in: path
+        name: orgId
+        required: true
+        type: string
       - description: Page size (default 50, max 200)
         in: query
         name: limit
@@ -1192,36 +1860,226 @@ paths:
               $ref: '#/definitions/models.OrganisationInvitation'
             type: array
         "400":
-          description: Bad Request
+          description: invalid orgId | invalid limit | invalid offset
           schema:
-            $ref: '#/definitions/utils.ErrorResponse'
+            $ref: '#/definitions/ErrorResponse'
         "401":
-          description: Unauthorized
+          description: Missing or invalid token (text/plain)
           schema:
-            $ref: '#/definitions/utils.ErrorResponse'
+            $ref: '#/definitions/UnauthorizedResponse'
+        "403":
+          description: organisation owner required
+          schema:
+            $ref: '#/definitions/ErrorResponse'
         "404":
-          description: Not Found
+          description: organisation not found
           schema:
-            $ref: '#/definitions/utils.ErrorResponse'
+            $ref: '#/definitions/ErrorResponse'
+        "429":
+          description: Rate limit exceeded (text/plain)
+          schema:
+            $ref: '#/definitions/TooManyRequestsResponse'
         "500":
           description: Internal Server Error
           schema:
-            $ref: '#/definitions/utils.ErrorResponse'
+            $ref: '#/definitions/InternalErrorResponse'
       security:
       - BearerAuth: []
-      summary: List invitations sent by the organisation
+      summary: List the pending invitations of an organisation
       tags:
       - organisation
-  /organisation/members/{id}/profile:
-    get:
-      description: Returns the member's identity, organisation role, and, for every
-        workspace of the organisation, whether it is visible to them ('private' by
-        default, 'public') and their role there ('view' by default, 'edit'). The caller
-        must belong to the same organisation as the target member.
+    post:
+      consumes:
+      - application/json
+      description: Sends an organisation-level invitation by email. role is the organisation
+        role granted on acceptance ('member' by default, or 'admin'). If the invitee
+        is a guest on tasks of the organisation, accepting turns those guest accesses
+        into access to the tasks' workspaces. Allowed for the organisation owner only.
       parameters:
+      - description: Organisation ID
+        in: path
+        name: orgId
+        required: true
+        type: string
+      - description: Invitation to create
+        in: body
+        name: body
+        required: true
+        schema:
+          $ref: '#/definitions/handler.inviteBody'
+      produces:
+      - application/json
+      responses:
+        "201":
+          description: Created
+          schema:
+            $ref: '#/definitions/utils.CreateResponse'
+        "400":
+          description: 'invalid orgId | could not read body | could not decode body
+            | errors: {field: message} (validation)'
+          schema:
+            $ref: '#/definitions/BadRequestResponse'
+        "401":
+          description: Missing or invalid token (text/plain)
+          schema:
+            $ref: '#/definitions/UnauthorizedResponse'
+        "403":
+          description: organisation owner required
+          schema:
+            $ref: '#/definitions/ErrorResponse'
+        "404":
+          description: organisation not found
+          schema:
+            $ref: '#/definitions/ErrorResponse'
+        "409":
+          description: an invitation is already pending for this email | this user
+            already belongs to the organisation
+          schema:
+            $ref: '#/definitions/ErrorResponse'
+        "415":
+          description: Unsupported Media Type
+          schema:
+            $ref: '#/definitions/UnsupportedMediaTypeResponse'
+        "429":
+          description: Rate limit exceeded (text/plain)
+          schema:
+            $ref: '#/definitions/TooManyRequestsResponse'
+        "500":
+          description: Internal Server Error
+          schema:
+            $ref: '#/definitions/InternalErrorResponse'
+      security:
+      - BearerAuth: []
+      summary: Invite someone into an organisation
+      tags:
+      - organisation
+  /organisations/{orgId}/members/{memberId}:
+    delete:
+      description: Removes an admin or member from the organisation, along with their
+        access to its workspaces and their assignments on its tasks. Allowed for the
+        organisation owner only, who cannot remove themselves.
+      parameters:
+      - description: Organisation ID
+        in: path
+        name: orgId
+        required: true
+        type: string
       - description: Member ID (user ID)
         in: path
-        name: id
+        name: memberId
+        required: true
+        type: string
+      responses:
+        "204":
+          description: No Content
+        "400":
+          description: invalid orgId | invalid memberId
+          schema:
+            $ref: '#/definitions/ErrorResponse'
+        "401":
+          description: Missing or invalid token (text/plain)
+          schema:
+            $ref: '#/definitions/UnauthorizedResponse'
+        "403":
+          description: organisation owner required | cannot remove yourself
+          schema:
+            $ref: '#/definitions/ErrorResponse'
+        "404":
+          description: organisation not found | member not found
+          schema:
+            $ref: '#/definitions/ErrorResponse'
+        "429":
+          description: Rate limit exceeded (text/plain)
+          schema:
+            $ref: '#/definitions/TooManyRequestsResponse'
+        "500":
+          description: Internal Server Error
+          schema:
+            $ref: '#/definitions/InternalErrorResponse'
+      security:
+      - BearerAuth: []
+      summary: Remove a member from an organisation
+      tags:
+      - organisation
+    patch:
+      consumes:
+      - application/json
+      description: Switches a member between 'admin' and 'member'. Allowed for the
+        organisation owner only, who cannot change their own role.
+      parameters:
+      - description: Organisation ID
+        in: path
+        name: orgId
+        required: true
+        type: string
+      - description: Member ID (user ID)
+        in: path
+        name: memberId
+        required: true
+        type: string
+      - description: New role
+        in: body
+        name: body
+        required: true
+        schema:
+          $ref: '#/definitions/handler.setMemberRoleBody'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/utils.UpdateResponse'
+        "400":
+          description: 'invalid orgId | invalid memberId | could not read body | could
+            not decode body | errors: {field: message} (validation)'
+          schema:
+            $ref: '#/definitions/BadRequestResponse'
+        "401":
+          description: Missing or invalid token (text/plain)
+          schema:
+            $ref: '#/definitions/UnauthorizedResponse'
+        "403":
+          description: organisation owner required | cannot change your own role
+          schema:
+            $ref: '#/definitions/ErrorResponse'
+        "404":
+          description: organisation not found | member not found
+          schema:
+            $ref: '#/definitions/ErrorResponse'
+        "415":
+          description: Unsupported Media Type
+          schema:
+            $ref: '#/definitions/UnsupportedMediaTypeResponse'
+        "429":
+          description: Rate limit exceeded (text/plain)
+          schema:
+            $ref: '#/definitions/TooManyRequestsResponse'
+        "500":
+          description: Internal Server Error
+          schema:
+            $ref: '#/definitions/InternalErrorResponse'
+      security:
+      - BearerAuth: []
+      summary: Change a member's organisation role
+      tags:
+      - organisation
+  /organisations/{orgId}/members/{memberId}/profile:
+    get:
+      description: Returns the person's identity, organisation role ('owner', 'admin'
+        or 'member') and, for each workspace, whether it is shared with them (visibility
+        'public', 'private' otherwise) and their role there ('view' by default, 'edit').
+        The owner gets every workspace of the organisation, an admin only the workspaces
+        shared with them. Allowed for the owner and admins.
+      parameters:
+      - description: Organisation ID
+        in: path
+        name: orgId
+        required: true
+        type: string
+      - description: Member ID (user ID)
+        in: path
+        name: memberId
         required: true
         type: string
       produces:
@@ -1232,34 +2090,48 @@ paths:
           schema:
             $ref: '#/definitions/handler.memberProfileResponse'
         "400":
-          description: Bad Request
+          description: invalid orgId | invalid memberId
           schema:
-            $ref: '#/definitions/utils.ErrorResponse'
+            $ref: '#/definitions/ErrorResponse'
         "401":
-          description: Unauthorized
+          description: Missing or invalid token (text/plain)
           schema:
-            $ref: '#/definitions/utils.ErrorResponse'
+            $ref: '#/definitions/UnauthorizedResponse'
+        "403":
+          description: organisation owner or admin required
+          schema:
+            $ref: '#/definitions/ErrorResponse'
         "404":
-          description: Not Found
+          description: organisation not found | member not found
           schema:
-            $ref: '#/definitions/utils.ErrorResponse'
+            $ref: '#/definitions/ErrorResponse'
+        "429":
+          description: Rate limit exceeded (text/plain)
+          schema:
+            $ref: '#/definitions/TooManyRequestsResponse'
         "500":
           description: Internal Server Error
           schema:
-            $ref: '#/definitions/utils.ErrorResponse'
+            $ref: '#/definitions/InternalErrorResponse'
       security:
       - BearerAuth: []
-      summary: Get a member's profile within the organisation
+      summary: Get a member's profile within an organisation
       tags:
       - organisation
   /roles:
     get:
-      description: Returns the caller's effective role ('edit' or 'view') at a given
-        point in time. With no query params, returns their organisation role. With
-        workspace_id set, returns their workspace role, optionally narrowed with task_id
-        to the role that actually applies there — a task-specific assignment always
-        wins over the organisation role.
+      description: 'Returns the caller''s effective role at a given point in time.
+        With organisation_id set, returns their role in that organisation (''owner'',
+        ''admin'' or ''member''; 404 if they do not belong to it). With workspace_id
+        set, returns their workspace role: ''edit'' if they may modify columns and
+        tasks, ''view'' otherwise (always ''view'' for a guest). With task_id as well,
+        returns their role on that task: the workspace role for a member, the invitation
+        role for a guest (''edit'' then only allows changing the description).'
       parameters:
+      - description: Organisation ID (ignored when workspace_id is set)
+        in: query
+        name: organisation_id
+        type: string
       - description: Workspace ID
         in: query
         name: workspace_id
@@ -1276,25 +2148,30 @@ paths:
           schema:
             $ref: '#/definitions/handler.roleResponse'
         "400":
-          description: Bad Request
+          description: organisation_id or workspace_id required | invalid organisation_id
+            | invalid workspace_id | invalid task_id
           schema:
-            $ref: '#/definitions/utils.ErrorResponse'
+            $ref: '#/definitions/ErrorResponse'
         "401":
-          description: Unauthorized
+          description: Missing or invalid token (text/plain)
           schema:
-            $ref: '#/definitions/utils.ErrorResponse'
+            $ref: '#/definitions/UnauthorizedResponse'
         "403":
-          description: Forbidden
+          description: no access to this workspace | no access to this task
           schema:
-            $ref: '#/definitions/utils.ErrorResponse'
+            $ref: '#/definitions/ErrorResponse'
         "404":
-          description: Not Found
+          description: organisation not found
           schema:
-            $ref: '#/definitions/utils.ErrorResponse'
+            $ref: '#/definitions/ErrorResponse'
+        "429":
+          description: Rate limit exceeded (text/plain)
+          schema:
+            $ref: '#/definitions/TooManyRequestsResponse'
         "500":
           description: Internal Server Error
           schema:
-            $ref: '#/definitions/utils.ErrorResponse'
+            $ref: '#/definitions/InternalErrorResponse'
       security:
       - BearerAuth: []
       summary: Get the caller's effective role for a scope
@@ -1321,17 +2198,21 @@ paths:
               $ref: '#/definitions/models.Tag'
             type: array
         "400":
-          description: Bad Request
+          description: invalid limit | invalid offset
           schema:
-            $ref: '#/definitions/utils.ErrorResponse'
+            $ref: '#/definitions/ErrorResponse'
         "401":
-          description: Unauthorized
+          description: Missing or invalid token (text/plain)
           schema:
-            $ref: '#/definitions/utils.ErrorResponse'
+            $ref: '#/definitions/UnauthorizedResponse'
+        "429":
+          description: Rate limit exceeded (text/plain)
+          schema:
+            $ref: '#/definitions/TooManyRequestsResponse'
         "500":
           description: Internal Server Error
           schema:
-            $ref: '#/definitions/utils.ErrorResponse'
+            $ref: '#/definitions/InternalErrorResponse'
       security:
       - BearerAuth: []
       summary: List tags
@@ -1355,22 +2236,26 @@ paths:
           schema:
             $ref: '#/definitions/utils.CreateResponse'
         "400":
-          description: Bad Request
+          description: 'could not read body | could not decode body | errors: {field:
+            message} (validation)'
           schema:
-            $ref: '#/definitions/utils.ErrorResponse'
+            $ref: '#/definitions/BadRequestResponse'
         "401":
-          description: Unauthorized
+          description: Missing or invalid token (text/plain)
           schema:
-            $ref: '#/definitions/utils.ErrorResponse'
-        "422":
-          description: Unprocessable Entity
+            $ref: '#/definitions/UnauthorizedResponse'
+        "415":
+          description: Unsupported Media Type
           schema:
-            additionalProperties: true
-            type: object
+            $ref: '#/definitions/UnsupportedMediaTypeResponse'
+        "429":
+          description: Rate limit exceeded (text/plain)
+          schema:
+            $ref: '#/definitions/TooManyRequestsResponse'
         "500":
           description: Internal Server Error
           schema:
-            $ref: '#/definitions/utils.ErrorResponse'
+            $ref: '#/definitions/InternalErrorResponse'
       security:
       - BearerAuth: []
       summary: Create a tag
@@ -1400,26 +2285,30 @@ paths:
           schema:
             $ref: '#/definitions/utils.UpdateResponse'
         "400":
-          description: Bad Request
+          description: 'invalid id | could not read body | could not decode body |
+            errors: {field: message} (validation)'
           schema:
-            $ref: '#/definitions/utils.ErrorResponse'
+            $ref: '#/definitions/BadRequestResponse'
         "401":
-          description: Unauthorized
+          description: Missing or invalid token (text/plain)
           schema:
-            $ref: '#/definitions/utils.ErrorResponse'
+            $ref: '#/definitions/UnauthorizedResponse'
         "404":
-          description: Not Found
+          description: tag not found
           schema:
-            $ref: '#/definitions/utils.ErrorResponse'
-        "422":
-          description: Unprocessable Entity
+            $ref: '#/definitions/ErrorResponse'
+        "415":
+          description: Unsupported Media Type
           schema:
-            additionalProperties: true
-            type: object
+            $ref: '#/definitions/UnsupportedMediaTypeResponse'
+        "429":
+          description: Rate limit exceeded (text/plain)
+          schema:
+            $ref: '#/definitions/TooManyRequestsResponse'
         "500":
           description: Internal Server Error
           schema:
-            $ref: '#/definitions/utils.ErrorResponse'
+            $ref: '#/definitions/InternalErrorResponse'
       security:
       - BearerAuth: []
       summary: Update a tag
@@ -1440,8 +2329,11 @@ paths:
         in: query
         name: q
         type: string
-      - description: names or recent. 'names' returns []models.WorkspaceName, 'recent'
-          returns []models.Workspace unpaginated. Ignored if q is set.
+      - description: '''names'' returns []models.WorkspaceName, ''recent'' returns
+          []models.Workspace unpaginated. Ignored if q is set.'
+        enum:
+        - names
+        - recent
         in: query
         name: view
         type: string
@@ -1465,17 +2357,21 @@ paths:
               $ref: '#/definitions/models.Workspace'
             type: array
         "400":
-          description: Bad Request
+          description: invalid limit | invalid offset | invalid q
           schema:
-            $ref: '#/definitions/utils.ErrorResponse'
+            $ref: '#/definitions/ErrorResponse'
         "401":
-          description: Unauthorized
+          description: Missing or invalid token (text/plain)
           schema:
-            $ref: '#/definitions/utils.ErrorResponse'
+            $ref: '#/definitions/UnauthorizedResponse'
+        "429":
+          description: Rate limit exceeded (text/plain)
+          schema:
+            $ref: '#/definitions/TooManyRequestsResponse'
         "500":
           description: Internal Server Error
           schema:
-            $ref: '#/definitions/utils.ErrorResponse'
+            $ref: '#/definitions/InternalErrorResponse'
       security:
       - BearerAuth: []
       summary: List workspaces
@@ -1484,6 +2380,9 @@ paths:
     post:
       consumes:
       - application/json
+      description: Creates a private workspace in the organisation the caller owns.
+        Only an organisation owner may create one (403 for a user who owns no organisation,
+        e.g. after deleting it).
       parameters:
       - description: Workspace to create
         in: body
@@ -1499,22 +2398,30 @@ paths:
           schema:
             $ref: '#/definitions/utils.CreateResponse'
         "400":
-          description: Bad Request
+          description: 'could not read body | could not decode body | errors: {field:
+            message} (validation)'
           schema:
-            $ref: '#/definitions/utils.ErrorResponse'
+            $ref: '#/definitions/BadRequestResponse'
         "401":
-          description: Unauthorized
+          description: Missing or invalid token (text/plain)
           schema:
-            $ref: '#/definitions/utils.ErrorResponse'
-        "422":
-          description: Unprocessable Entity
+            $ref: '#/definitions/UnauthorizedResponse'
+        "403":
+          description: organisation owner required
           schema:
-            additionalProperties: true
-            type: object
+            $ref: '#/definitions/ErrorResponse'
+        "415":
+          description: Unsupported Media Type
+          schema:
+            $ref: '#/definitions/UnsupportedMediaTypeResponse'
+        "429":
+          description: Rate limit exceeded (text/plain)
+          schema:
+            $ref: '#/definitions/TooManyRequestsResponse'
         "500":
           description: Internal Server Error
           schema:
-            $ref: '#/definitions/utils.ErrorResponse'
+            $ref: '#/definitions/InternalErrorResponse'
       security:
       - BearerAuth: []
       summary: Create a workspace
@@ -1522,7 +2429,9 @@ paths:
       - workspace
   /workspaces/{id}:
     delete:
-      description: Soft-deletes a workspace.
+      description: Soft-deletes a workspace, along with its columns and tasks. Only
+        the organisation owner may call this (403 for other users who see the workspace,
+        404 "workspace not found" for the others).
       parameters:
       - description: Workspace ID
         in: path
@@ -1533,28 +2442,37 @@ paths:
         "204":
           description: No Content
         "400":
-          description: Bad Request
+          description: invalid id
           schema:
-            $ref: '#/definitions/utils.ErrorResponse'
+            $ref: '#/definitions/ErrorResponse'
         "401":
-          description: Unauthorized
+          description: Missing or invalid token (text/plain)
           schema:
-            $ref: '#/definitions/utils.ErrorResponse'
+            $ref: '#/definitions/UnauthorizedResponse'
+        "403":
+          description: organisation owner required
+          schema:
+            $ref: '#/definitions/ErrorResponse'
         "404":
-          description: Not Found
+          description: workspace not found
           schema:
-            $ref: '#/definitions/utils.ErrorResponse'
+            $ref: '#/definitions/ErrorResponse'
+        "429":
+          description: Rate limit exceeded (text/plain)
+          schema:
+            $ref: '#/definitions/TooManyRequestsResponse'
         "500":
           description: Internal Server Error
           schema:
-            $ref: '#/definitions/utils.ErrorResponse'
+            $ref: '#/definitions/InternalErrorResponse'
       security:
       - BearerAuth: []
       summary: Delete a workspace
       tags:
       - workspace
     get:
-      description: Get a workspace's full detail (columns and tasks included).
+      description: Get a workspace's full detail (columns and tasks included). A guest
+        only gets the tasks shared with them (and their columns), and no members.
       parameters:
       - description: Workspace ID
         in: path
@@ -1569,21 +2487,25 @@ paths:
           schema:
             $ref: '#/definitions/models.WorkspaceDetail'
         "400":
-          description: Bad Request
+          description: invalid id
           schema:
-            $ref: '#/definitions/utils.ErrorResponse'
+            $ref: '#/definitions/ErrorResponse'
         "401":
-          description: Unauthorized
+          description: Missing or invalid token (text/plain)
           schema:
-            $ref: '#/definitions/utils.ErrorResponse'
+            $ref: '#/definitions/UnauthorizedResponse'
         "404":
-          description: Not Found
+          description: workspace not found
           schema:
-            $ref: '#/definitions/utils.ErrorResponse'
+            $ref: '#/definitions/ErrorResponse'
+        "429":
+          description: Rate limit exceeded (text/plain)
+          schema:
+            $ref: '#/definitions/TooManyRequestsResponse'
         "500":
           description: Internal Server Error
           schema:
-            $ref: '#/definitions/utils.ErrorResponse'
+            $ref: '#/definitions/InternalErrorResponse'
       security:
       - BearerAuth: []
       summary: Get a workspace
@@ -1592,6 +2514,17 @@ paths:
     patch:
       consumes:
       - application/json
+      description: 'Updates name/description and, in the same transaction, the access
+        of each listed member on this workspace: visibility (''private'' removes the
+        member''s access, ''public'' grants it) and/or role (''view'' or ''edit'').
+        For each member, an omitted field keeps its current value, or its default
+        (''private'' / ''view'') if the member had no access yet: to add a member,
+        send visibility ''public''. Allowed for the organisation owner, or an admin
+        the workspace is shared with (403 for other users who see the workspace, 404
+        "workspace not found" for the others). An admin only manages members, never
+        another admin or the owner; nobody changes their own access (403). Every listed
+        member must belong to the organisation (404 otherwise). Nothing is changed
+        when a check fails.'
       parameters:
       - description: Workspace ID
         in: path
@@ -1612,26 +2545,35 @@ paths:
           schema:
             $ref: '#/definitions/utils.UpdateResponse'
         "400":
-          description: Bad Request
+          description: 'invalid id | could not read body | could not decode body |
+            errors: {field: message} (validation)'
           schema:
-            $ref: '#/definitions/utils.ErrorResponse'
+            $ref: '#/definitions/BadRequestResponse'
         "401":
-          description: Unauthorized
+          description: Missing or invalid token (text/plain)
           schema:
-            $ref: '#/definitions/utils.ErrorResponse'
+            $ref: '#/definitions/UnauthorizedResponse'
+        "403":
+          description: organisation owner or admin required | cannot change your own
+            access | cannot manage this member's access
+          schema:
+            $ref: '#/definitions/ErrorResponse'
         "404":
-          description: Not Found
+          description: workspace not found | member not found in this organisation
           schema:
-            $ref: '#/definitions/utils.ErrorResponse'
-        "422":
-          description: Unprocessable Entity
+            $ref: '#/definitions/ErrorResponse'
+        "415":
+          description: Unsupported Media Type
           schema:
-            additionalProperties: true
-            type: object
+            $ref: '#/definitions/UnsupportedMediaTypeResponse'
+        "429":
+          description: Rate limit exceeded (text/plain)
+          schema:
+            $ref: '#/definitions/TooManyRequestsResponse'
         "500":
           description: Internal Server Error
           schema:
-            $ref: '#/definitions/utils.ErrorResponse'
+            $ref: '#/definitions/InternalErrorResponse'
       security:
       - BearerAuth: []
       summary: Update a workspace
@@ -1639,10 +2581,13 @@ paths:
       - workspace
   /workspaces/{id}/abilities:
     get:
-      description: Returns the caller's permissions on the workspace as a list of
-        CASL rules (action/subject/conditions), consumable directly by @casl/ability's
-        createMongoAbility(rules) on the Angular side. Covers the Workspace, Column
-        and Task subjects, including per-task overrides from task assignments.
+      description: 'Returns the caller''s permissions on the workspace as a list of
+        CASL rules (action/subject/fields/conditions), consumable directly by @casl/ability''s
+        createMongoAbility(rules) on the Angular side. Actions: read, create, update,
+        delete on Workspace, Column and Task, plus share (manage the members'' access)
+        on Workspace, and assign and invite (guests) on Task. A guest gets read on
+        the Workspace and on each task shared with them, and update restricted to
+        the description field on the tasks they were invited to with ''edit''.'
       parameters:
       - description: Workspace ID
         in: path
@@ -1659,25 +2604,25 @@ paths:
               $ref: '#/definitions/models.AbilityRule'
             type: array
         "400":
-          description: Bad Request
+          description: invalid id
           schema:
-            $ref: '#/definitions/utils.ErrorResponse'
+            $ref: '#/definitions/ErrorResponse'
         "401":
-          description: Unauthorized
+          description: Missing or invalid token (text/plain)
           schema:
-            $ref: '#/definitions/utils.ErrorResponse'
-        "403":
-          description: Forbidden
-          schema:
-            $ref: '#/definitions/utils.ErrorResponse'
+            $ref: '#/definitions/UnauthorizedResponse'
         "404":
-          description: Not Found
+          description: workspace not found
           schema:
-            $ref: '#/definitions/utils.ErrorResponse'
+            $ref: '#/definitions/ErrorResponse'
+        "429":
+          description: Rate limit exceeded (text/plain)
+          schema:
+            $ref: '#/definitions/TooManyRequestsResponse'
         "500":
           description: Internal Server Error
           schema:
-            $ref: '#/definitions/utils.ErrorResponse'
+            $ref: '#/definitions/InternalErrorResponse'
       security:
       - BearerAuth: []
       summary: Get the caller's CASL abilities for a workspace
@@ -1707,26 +2652,34 @@ paths:
           schema:
             $ref: '#/definitions/utils.CreateResponse'
         "400":
-          description: Bad Request
+          description: 'invalid id | could not read body | could not decode body |
+            errors: {field: message} (validation)'
           schema:
-            $ref: '#/definitions/utils.ErrorResponse'
+            $ref: '#/definitions/BadRequestResponse'
         "401":
-          description: Unauthorized
+          description: Missing or invalid token (text/plain)
           schema:
-            $ref: '#/definitions/utils.ErrorResponse'
+            $ref: '#/definitions/UnauthorizedResponse'
+        "403":
+          description: organisation owner or admin required
+          schema:
+            $ref: '#/definitions/ErrorResponse'
         "404":
-          description: Not Found
+          description: workspace not found
           schema:
-            $ref: '#/definitions/utils.ErrorResponse'
-        "422":
-          description: Unprocessable Entity
+            $ref: '#/definitions/ErrorResponse'
+        "415":
+          description: Unsupported Media Type
           schema:
-            additionalProperties: true
-            type: object
+            $ref: '#/definitions/UnsupportedMediaTypeResponse'
+        "429":
+          description: Rate limit exceeded (text/plain)
+          schema:
+            $ref: '#/definitions/TooManyRequestsResponse'
         "500":
           description: Internal Server Error
           schema:
-            $ref: '#/definitions/utils.ErrorResponse'
+            $ref: '#/definitions/InternalErrorResponse'
       security:
       - BearerAuth: []
       summary: Create a column
@@ -1750,21 +2703,29 @@ paths:
         "204":
           description: No Content
         "400":
-          description: Bad Request
+          description: invalid id | invalid columnId
           schema:
-            $ref: '#/definitions/utils.ErrorResponse'
+            $ref: '#/definitions/ErrorResponse'
         "401":
-          description: Unauthorized
+          description: Missing or invalid token (text/plain)
           schema:
-            $ref: '#/definitions/utils.ErrorResponse'
+            $ref: '#/definitions/UnauthorizedResponse'
+        "403":
+          description: organisation owner or admin required
+          schema:
+            $ref: '#/definitions/ErrorResponse'
         "404":
-          description: Not Found
+          description: workspace not found | column not found
           schema:
-            $ref: '#/definitions/utils.ErrorResponse'
+            $ref: '#/definitions/ErrorResponse'
+        "429":
+          description: Rate limit exceeded (text/plain)
+          schema:
+            $ref: '#/definitions/TooManyRequestsResponse'
         "500":
           description: Internal Server Error
           schema:
-            $ref: '#/definitions/utils.ErrorResponse'
+            $ref: '#/definitions/InternalErrorResponse'
       security:
       - BearerAuth: []
       summary: Delete a column
@@ -1798,26 +2759,34 @@ paths:
           schema:
             $ref: '#/definitions/utils.UpdateResponse'
         "400":
-          description: Bad Request
+          description: 'invalid id | invalid columnId | could not read body | could
+            not decode body | errors: {field: message} (validation)'
           schema:
-            $ref: '#/definitions/utils.ErrorResponse'
+            $ref: '#/definitions/BadRequestResponse'
         "401":
-          description: Unauthorized
+          description: Missing or invalid token (text/plain)
           schema:
-            $ref: '#/definitions/utils.ErrorResponse'
+            $ref: '#/definitions/UnauthorizedResponse'
+        "403":
+          description: edit access required
+          schema:
+            $ref: '#/definitions/ErrorResponse'
         "404":
-          description: Not Found
+          description: workspace not found | column not found
           schema:
-            $ref: '#/definitions/utils.ErrorResponse'
-        "422":
-          description: Unprocessable Entity
+            $ref: '#/definitions/ErrorResponse'
+        "415":
+          description: Unsupported Media Type
           schema:
-            additionalProperties: true
-            type: object
+            $ref: '#/definitions/UnsupportedMediaTypeResponse'
+        "429":
+          description: Rate limit exceeded (text/plain)
+          schema:
+            $ref: '#/definitions/TooManyRequestsResponse'
         "500":
           description: Internal Server Error
           schema:
-            $ref: '#/definitions/utils.ErrorResponse'
+            $ref: '#/definitions/InternalErrorResponse'
       security:
       - BearerAuth: []
       summary: Update or reorder a column
@@ -1852,26 +2821,38 @@ paths:
           schema:
             $ref: '#/definitions/utils.CreateResponse'
         "400":
-          description: Bad Request
+          description: 'invalid id | invalid columnId | could not read body | could
+            not decode body | errors: {field: message} (validation)'
           schema:
-            $ref: '#/definitions/utils.ErrorResponse'
+            $ref: '#/definitions/BadRequestResponse'
         "401":
-          description: Unauthorized
+          description: Missing or invalid token (text/plain)
           schema:
-            $ref: '#/definitions/utils.ErrorResponse'
+            $ref: '#/definitions/UnauthorizedResponse'
+        "403":
+          description: organisation owner or admin required
+          schema:
+            $ref: '#/definitions/ErrorResponse'
         "404":
-          description: Not Found
+          description: workspace not found | column not found | tag not found
           schema:
-            $ref: '#/definitions/utils.ErrorResponse'
+            $ref: '#/definitions/ErrorResponse'
+        "415":
+          description: Unsupported Media Type
+          schema:
+            $ref: '#/definitions/UnsupportedMediaTypeResponse'
         "422":
-          description: Unprocessable Entity
+          description: invalid status
           schema:
-            additionalProperties: true
-            type: object
+            $ref: '#/definitions/ErrorResponse'
+        "429":
+          description: Rate limit exceeded (text/plain)
+          schema:
+            $ref: '#/definitions/TooManyRequestsResponse'
         "500":
           description: Internal Server Error
           schema:
-            $ref: '#/definitions/utils.ErrorResponse'
+            $ref: '#/definitions/InternalErrorResponse'
       security:
       - BearerAuth: []
       summary: Create a task
@@ -1900,21 +2881,29 @@ paths:
         "204":
           description: No Content
         "400":
-          description: Bad Request
+          description: invalid id | invalid columnId | invalid taskId
           schema:
-            $ref: '#/definitions/utils.ErrorResponse'
+            $ref: '#/definitions/ErrorResponse'
         "401":
-          description: Unauthorized
+          description: Missing or invalid token (text/plain)
           schema:
-            $ref: '#/definitions/utils.ErrorResponse'
+            $ref: '#/definitions/UnauthorizedResponse'
+        "403":
+          description: organisation owner or admin required
+          schema:
+            $ref: '#/definitions/ErrorResponse'
         "404":
-          description: Not Found
+          description: workspace not found | column not found | task not found
           schema:
-            $ref: '#/definitions/utils.ErrorResponse'
+            $ref: '#/definitions/ErrorResponse'
+        "429":
+          description: Rate limit exceeded (text/plain)
+          schema:
+            $ref: '#/definitions/TooManyRequestsResponse'
         "500":
           description: Internal Server Error
           schema:
-            $ref: '#/definitions/utils.ErrorResponse'
+            $ref: '#/definitions/InternalErrorResponse'
       security:
       - BearerAuth: []
       summary: Delete a task
@@ -1923,6 +2912,8 @@ paths:
     patch:
       consumes:
       - application/json
+      description: Requires edit access on the workspace. A guest invited with 'edit'
+        on the task may only change its description.
       parameters:
       - description: Workspace ID
         in: path
@@ -1953,26 +2944,39 @@ paths:
           schema:
             $ref: '#/definitions/utils.UpdateResponse'
         "400":
-          description: Bad Request
+          description: 'invalid id | invalid columnId | invalid taskId | could not
+            read body | could not decode body | errors: {field: message} (validation)'
           schema:
-            $ref: '#/definitions/utils.ErrorResponse'
+            $ref: '#/definitions/BadRequestResponse'
         "401":
-          description: Unauthorized
+          description: Missing or invalid token (text/plain)
           schema:
-            $ref: '#/definitions/utils.ErrorResponse'
+            $ref: '#/definitions/UnauthorizedResponse'
+        "403":
+          description: edit access required | guests can only edit the description
+          schema:
+            $ref: '#/definitions/ErrorResponse'
         "404":
-          description: Not Found
+          description: workspace not found | column not found | task not found | target
+            column not found in this workspace | tag not found
           schema:
-            $ref: '#/definitions/utils.ErrorResponse'
+            $ref: '#/definitions/ErrorResponse'
+        "415":
+          description: Unsupported Media Type
+          schema:
+            $ref: '#/definitions/UnsupportedMediaTypeResponse'
         "422":
-          description: Unprocessable Entity
+          description: invalid status
           schema:
-            additionalProperties: true
-            type: object
+            $ref: '#/definitions/ErrorResponse'
+        "429":
+          description: Rate limit exceeded (text/plain)
+          schema:
+            $ref: '#/definitions/TooManyRequestsResponse'
         "500":
           description: Internal Server Error
           schema:
-            $ref: '#/definitions/utils.ErrorResponse'
+            $ref: '#/definitions/InternalErrorResponse'
       security:
       - BearerAuth: []
       summary: Update or move a task
@@ -1980,6 +2984,8 @@ paths:
       - task
   /workspaces/{id}/columns/{columnId}/tasks/{taskId}/assignees:
     get:
+      description: Members assigned to the task, followed by the guests who accepted
+        an invitation on it (is_guest).
       parameters:
       - description: Workspace ID
         in: path
@@ -2006,21 +3012,25 @@ paths:
               $ref: '#/definitions/models.TaskAssignee'
             type: array
         "400":
-          description: Bad Request
+          description: invalid id | invalid columnId | invalid taskId
           schema:
-            $ref: '#/definitions/utils.ErrorResponse'
+            $ref: '#/definitions/ErrorResponse'
         "401":
-          description: Unauthorized
+          description: Missing or invalid token (text/plain)
           schema:
-            $ref: '#/definitions/utils.ErrorResponse'
+            $ref: '#/definitions/UnauthorizedResponse'
         "404":
-          description: Not Found
+          description: workspace not found | column not found | task not found
           schema:
-            $ref: '#/definitions/utils.ErrorResponse'
+            $ref: '#/definitions/ErrorResponse'
+        "429":
+          description: Rate limit exceeded (text/plain)
+          schema:
+            $ref: '#/definitions/TooManyRequestsResponse'
         "500":
           description: Internal Server Error
           schema:
-            $ref: '#/definitions/utils.ErrorResponse'
+            $ref: '#/definitions/InternalErrorResponse'
       security:
       - BearerAuth: []
       summary: List a task's assignees
@@ -2029,9 +3039,9 @@ paths:
     post:
       consumes:
       - application/json
-      description: Grants the member a task-specific role, independent of their organisation
-        role. This role always takes precedence when resolving the member's effective
-        access to this task. Requires edit access on the task.
+      description: Shows the member as working on the task. An assignment grants no
+        access and changes no role. The member must have access to the workspace.
+        Requires edit access on the workspace.
       parameters:
       - description: Workspace ID
         in: path
@@ -2060,26 +3070,35 @@ paths:
         "204":
           description: No Content
         "400":
-          description: Bad Request
+          description: 'invalid id | invalid columnId | invalid taskId | could not
+            read body | could not decode body | errors: {field: message} (validation)'
           schema:
-            $ref: '#/definitions/utils.ErrorResponse'
+            $ref: '#/definitions/BadRequestResponse'
         "401":
-          description: Unauthorized
+          description: Missing or invalid token (text/plain)
           schema:
-            $ref: '#/definitions/utils.ErrorResponse'
+            $ref: '#/definitions/UnauthorizedResponse'
+        "403":
+          description: edit access required
+          schema:
+            $ref: '#/definitions/ErrorResponse'
         "404":
-          description: Not Found
+          description: workspace not found | column not found | task not found | member
+            not found in this workspace
           schema:
-            $ref: '#/definitions/utils.ErrorResponse'
-        "422":
-          description: Unprocessable Entity
+            $ref: '#/definitions/ErrorResponse'
+        "415":
+          description: Unsupported Media Type
           schema:
-            additionalProperties: true
-            type: object
+            $ref: '#/definitions/UnsupportedMediaTypeResponse'
+        "429":
+          description: Rate limit exceeded (text/plain)
+          schema:
+            $ref: '#/definitions/TooManyRequestsResponse'
         "500":
           description: Internal Server Error
           schema:
-            $ref: '#/definitions/utils.ErrorResponse'
+            $ref: '#/definitions/InternalErrorResponse'
       security:
       - BearerAuth: []
       summary: Assign a member to a task
@@ -2112,21 +3131,29 @@ paths:
         "204":
           description: No Content
         "400":
-          description: Bad Request
+          description: invalid id | invalid columnId | invalid taskId | invalid memberId
           schema:
-            $ref: '#/definitions/utils.ErrorResponse'
+            $ref: '#/definitions/ErrorResponse'
         "401":
-          description: Unauthorized
+          description: Missing or invalid token (text/plain)
           schema:
-            $ref: '#/definitions/utils.ErrorResponse'
+            $ref: '#/definitions/UnauthorizedResponse'
+        "403":
+          description: edit access required
+          schema:
+            $ref: '#/definitions/ErrorResponse'
         "404":
-          description: Not Found
+          description: workspace not found | column not found | task not found
           schema:
-            $ref: '#/definitions/utils.ErrorResponse'
+            $ref: '#/definitions/ErrorResponse'
+        "429":
+          description: Rate limit exceeded (text/plain)
+          schema:
+            $ref: '#/definitions/TooManyRequestsResponse'
         "500":
           description: Internal Server Error
           schema:
-            $ref: '#/definitions/utils.ErrorResponse'
+            $ref: '#/definitions/InternalErrorResponse'
       security:
       - BearerAuth: []
       summary: Unassign a member from a task
@@ -2134,6 +3161,9 @@ paths:
       - task
   /workspaces/{id}/columns/{columnId}/tasks/{taskId}/guests:
     get:
+      description: Expired invitations are included (expires_at in the past) so that
+        they can be resent. Allowed for the organisation owner, or an admin the workspace
+        is shared with.
       parameters:
       - description: Workspace ID
         in: path
@@ -2168,21 +3198,30 @@ paths:
               $ref: '#/definitions/models.TaskGuest'
             type: array
         "400":
-          description: Bad Request
+          description: invalid id | invalid columnId | invalid taskId | invalid limit
+            | invalid offset
           schema:
-            $ref: '#/definitions/utils.ErrorResponse'
+            $ref: '#/definitions/ErrorResponse'
         "401":
-          description: Unauthorized
+          description: Missing or invalid token (text/plain)
           schema:
-            $ref: '#/definitions/utils.ErrorResponse'
+            $ref: '#/definitions/UnauthorizedResponse'
+        "403":
+          description: organisation owner or admin required
+          schema:
+            $ref: '#/definitions/ErrorResponse'
         "404":
-          description: Not Found
+          description: workspace not found | column not found | task not found
           schema:
-            $ref: '#/definitions/utils.ErrorResponse'
+            $ref: '#/definitions/ErrorResponse'
+        "429":
+          description: Rate limit exceeded (text/plain)
+          schema:
+            $ref: '#/definitions/TooManyRequestsResponse'
         "500":
           description: Internal Server Error
           schema:
-            $ref: '#/definitions/utils.ErrorResponse'
+            $ref: '#/definitions/InternalErrorResponse'
       security:
       - BearerAuth: []
       summary: List pending guest invitations sent for a task
@@ -2193,7 +3232,9 @@ paths:
       - application/json
       description: Invites someone by email to a single task, without granting any
         organisation membership. They can accept even without an existing Kanbano
-        account.
+        account. The invitation expires after 7 days; inviting the same email again
+        replaces an expired invitation. Allowed for the organisation owner, or an
+        admin the workspace is shared with.
       parameters:
       - description: Workspace ID
         in: path
@@ -2224,33 +3265,177 @@ paths:
           schema:
             $ref: '#/definitions/utils.CreateResponse'
         "400":
-          description: Bad Request
+          description: 'invalid id | invalid columnId | invalid taskId | could not
+            read body | could not decode body | errors: {field: message} (validation)'
           schema:
-            $ref: '#/definitions/utils.ErrorResponse'
+            $ref: '#/definitions/BadRequestResponse'
         "401":
-          description: Unauthorized
+          description: Missing or invalid token (text/plain)
           schema:
-            $ref: '#/definitions/utils.ErrorResponse'
+            $ref: '#/definitions/UnauthorizedResponse'
+        "403":
+          description: organisation owner or admin required
+          schema:
+            $ref: '#/definitions/ErrorResponse'
         "404":
-          description: Not Found
+          description: workspace not found | column not found | task not found
           schema:
-            $ref: '#/definitions/utils.ErrorResponse'
+            $ref: '#/definitions/ErrorResponse'
         "409":
-          description: Conflict
+          description: an invitation is already pending for this email | this user
+            already has access to this task
           schema:
-            $ref: '#/definitions/utils.ErrorResponse'
-        "422":
-          description: Unprocessable Entity
+            $ref: '#/definitions/ErrorResponse'
+        "415":
+          description: Unsupported Media Type
           schema:
-            additionalProperties: true
-            type: object
+            $ref: '#/definitions/UnsupportedMediaTypeResponse'
+        "429":
+          description: Rate limit exceeded (text/plain)
+          schema:
+            $ref: '#/definitions/TooManyRequestsResponse'
         "500":
           description: Internal Server Error
           schema:
-            $ref: '#/definitions/utils.ErrorResponse'
+            $ref: '#/definitions/InternalErrorResponse'
       security:
       - BearerAuth: []
       summary: Invite an external guest to a task
+      tags:
+      - task
+  /workspaces/{id}/columns/{columnId}/tasks/{taskId}/guests/{userId}:
+    delete:
+      description: Removes the access of a guest who accepted an invitation on this
+        task; they no longer see it nor appear among its assignees. Allowed for the
+        organisation owner, or an admin the workspace is shared with.
+      parameters:
+      - description: Workspace ID
+        in: path
+        name: id
+        required: true
+        type: string
+      - description: Column ID
+        in: path
+        name: columnId
+        required: true
+        type: string
+      - description: Task ID
+        in: path
+        name: taskId
+        required: true
+        type: string
+      - description: Guest's user ID
+        in: path
+        name: userId
+        required: true
+        type: string
+      responses:
+        "204":
+          description: No Content
+        "400":
+          description: invalid id | invalid columnId | invalid taskId | invalid userId
+          schema:
+            $ref: '#/definitions/ErrorResponse'
+        "401":
+          description: Missing or invalid token (text/plain)
+          schema:
+            $ref: '#/definitions/UnauthorizedResponse'
+        "403":
+          description: organisation owner or admin required
+          schema:
+            $ref: '#/definitions/ErrorResponse'
+        "404":
+          description: workspace not found | column not found | task not found | guest
+            not found
+          schema:
+            $ref: '#/definitions/ErrorResponse'
+        "429":
+          description: Rate limit exceeded (text/plain)
+          schema:
+            $ref: '#/definitions/TooManyRequestsResponse'
+        "500":
+          description: Internal Server Error
+          schema:
+            $ref: '#/definitions/InternalErrorResponse'
+      security:
+      - BearerAuth: []
+      summary: Remove a guest from a task
+      tags:
+      - task
+    put:
+      consumes:
+      - application/json
+      description: Changes the role ('view' or 'edit') of a guest who accepted an
+        invitation on this task. Allowed for the organisation owner, or an admin the
+        workspace is shared with.
+      parameters:
+      - description: Workspace ID
+        in: path
+        name: id
+        required: true
+        type: string
+      - description: Column ID
+        in: path
+        name: columnId
+        required: true
+        type: string
+      - description: Task ID
+        in: path
+        name: taskId
+        required: true
+        type: string
+      - description: Guest's user ID
+        in: path
+        name: userId
+        required: true
+        type: string
+      - description: New role
+        in: body
+        name: body
+        required: true
+        schema:
+          $ref: '#/definitions/handler.setTaskGuestRoleBody'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/utils.UpdateResponse'
+        "400":
+          description: 'invalid id | invalid columnId | invalid taskId | invalid userId
+            | could not read body | could not decode body | errors: {field: message}
+            (validation)'
+          schema:
+            $ref: '#/definitions/BadRequestResponse'
+        "401":
+          description: Missing or invalid token (text/plain)
+          schema:
+            $ref: '#/definitions/UnauthorizedResponse'
+        "403":
+          description: organisation owner or admin required
+          schema:
+            $ref: '#/definitions/ErrorResponse'
+        "404":
+          description: workspace not found | column not found | task not found | guest
+            not found
+          schema:
+            $ref: '#/definitions/ErrorResponse'
+        "415":
+          description: Unsupported Media Type
+          schema:
+            $ref: '#/definitions/UnsupportedMediaTypeResponse'
+        "429":
+          description: Rate limit exceeded (text/plain)
+          schema:
+            $ref: '#/definitions/TooManyRequestsResponse'
+        "500":
+          description: Internal Server Error
+          schema:
+            $ref: '#/definitions/InternalErrorResponse'
+      security:
+      - BearerAuth: []
+      summary: Change a guest's role on a task
       tags:
       - task
   /workspaces/{id}/columns/names:
@@ -2271,21 +3456,29 @@ paths:
               $ref: '#/definitions/models.ColumnName'
             type: array
         "400":
-          description: Bad Request
+          description: invalid id
           schema:
-            $ref: '#/definitions/utils.ErrorResponse'
+            $ref: '#/definitions/ErrorResponse'
         "401":
-          description: Unauthorized
+          description: Missing or invalid token (text/plain)
           schema:
-            $ref: '#/definitions/utils.ErrorResponse'
+            $ref: '#/definitions/UnauthorizedResponse'
+        "403":
+          description: guest access is limited to shared tasks
+          schema:
+            $ref: '#/definitions/ErrorResponse'
         "404":
-          description: Not Found
+          description: workspace not found
           schema:
-            $ref: '#/definitions/utils.ErrorResponse'
+            $ref: '#/definitions/ErrorResponse'
+        "429":
+          description: Rate limit exceeded (text/plain)
+          schema:
+            $ref: '#/definitions/TooManyRequestsResponse'
         "500":
           description: Internal Server Error
           schema:
-            $ref: '#/definitions/utils.ErrorResponse'
+            $ref: '#/definitions/InternalErrorResponse'
       security:
       - BearerAuth: []
       summary: List column names
@@ -2299,8 +3492,11 @@ paths:
         the default, or 'public') and/or their role on it ('view', the default, or
         'edit'). Both fields are optional and independent; omitting one leaves it
         unchanged (or at its default if this is the member's first override on this
-        workspace). Only callers with organisation-level 'edit' (manage) may call
-        this.
+        workspace). Allowed for the organisation owner, or an admin the workspace
+        is shared with; an admin only manages members, never another admin or the
+        owner, and nobody changes their own access. The member must belong to the
+        organisation. Same effect as PATCH /workspaces/{id} with a single entry in
+        members.
       parameters:
       - description: Workspace ID
         in: path
@@ -2326,30 +3522,35 @@ paths:
           schema:
             $ref: '#/definitions/utils.UpdateResponse'
         "400":
-          description: Bad Request
+          description: 'invalid id | invalid memberID | could not read body | could
+            not decode body | errors: {field: message} (validation)'
           schema:
-            $ref: '#/definitions/utils.ErrorResponse'
+            $ref: '#/definitions/BadRequestResponse'
         "401":
-          description: Unauthorized
+          description: Missing or invalid token (text/plain)
           schema:
-            $ref: '#/definitions/utils.ErrorResponse'
+            $ref: '#/definitions/UnauthorizedResponse'
         "403":
-          description: Forbidden
+          description: organisation owner or admin required | cannot change your own
+            access | cannot manage this member's access
           schema:
-            $ref: '#/definitions/utils.ErrorResponse'
+            $ref: '#/definitions/ErrorResponse'
         "404":
-          description: Not Found
+          description: workspace not found | member not found in this organisation
           schema:
-            $ref: '#/definitions/utils.ErrorResponse'
-        "422":
-          description: Unprocessable Entity
+            $ref: '#/definitions/ErrorResponse'
+        "415":
+          description: Unsupported Media Type
           schema:
-            additionalProperties: true
-            type: object
+            $ref: '#/definitions/UnsupportedMediaTypeResponse'
+        "429":
+          description: Rate limit exceeded (text/plain)
+          schema:
+            $ref: '#/definitions/TooManyRequestsResponse'
         "500":
           description: Internal Server Error
           schema:
-            $ref: '#/definitions/utils.ErrorResponse'
+            $ref: '#/definitions/InternalErrorResponse'
       security:
       - BearerAuth: []
       summary: Override a member's visibility and/or role on a workspace
@@ -2357,9 +3558,10 @@ paths:
       - role
   /workspaces/{id}/tasks/roles:
     get:
-      description: 'Single query resolving, for every task the caller can see, their
-        effective role: a task_assignees entry always wins over the caller''s organisation
-        role.'
+      description: 'Lists the tasks the caller sees, with their role on each: every
+        task with the same role for a member (''edit'' if they may modify tasks),
+        only the tasks shared with them for a guest, with their guest role (''edit''
+        then only allows changing the description).'
       parameters:
       - description: Workspace ID
         in: path
@@ -2376,21 +3578,25 @@ paths:
               $ref: '#/definitions/models.TaskRole'
             type: array
         "400":
-          description: Bad Request
+          description: invalid id
           schema:
-            $ref: '#/definitions/utils.ErrorResponse'
+            $ref: '#/definitions/ErrorResponse'
         "401":
-          description: Unauthorized
+          description: Missing or invalid token (text/plain)
           schema:
-            $ref: '#/definitions/utils.ErrorResponse'
+            $ref: '#/definitions/UnauthorizedResponse'
         "404":
-          description: Not Found
+          description: workspace not found
           schema:
-            $ref: '#/definitions/utils.ErrorResponse'
+            $ref: '#/definitions/ErrorResponse'
+        "429":
+          description: Rate limit exceeded (text/plain)
+          schema:
+            $ref: '#/definitions/TooManyRequestsResponse'
         "500":
           description: Internal Server Error
           schema:
-            $ref: '#/definitions/utils.ErrorResponse'
+            $ref: '#/definitions/InternalErrorResponse'
       security:
       - BearerAuth: []
       summary: List the caller's resolved role for every task in a workspace
@@ -2405,9 +3611,13 @@ paths:
         "101":
           description: Switching Protocols
         "401":
-          description: missing or invalid token
+          description: Missing or invalid token (text/plain)
           schema:
-            type: string
+            $ref: '#/definitions/UnauthorizedResponse'
+        "429":
+          description: Rate limit exceeded (text/plain)
+          schema:
+            $ref: '#/definitions/TooManyRequestsResponse'
       summary: WebSocket connection for real-time updates
       tags:
       - ws

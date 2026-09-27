@@ -31,9 +31,10 @@ func NewTagHandler(repo *repository.TagRepository) *TagHandler {
 // @Param limit query int false "Page size (default 50, max 200)"
 // @Param offset query int false "Page offset (default 0)"
 // @Success 200 {array} models.Tag
-// @Failure 400 {object} utils.ErrorResponse
-// @Failure 401 {object} utils.ErrorResponse
-// @Failure 500 {object} utils.ErrorResponse
+// @Failure 400 {object} ErrorResponse "invalid limit | invalid offset"
+// @Failure 401 {object} UnauthorizedResponse "Missing or invalid token (text/plain)"
+// @Failure 429 {object} TooManyRequestsResponse "Rate limit exceeded (text/plain)"
+// @Failure 500 {object} InternalErrorResponse
 // @Security BearerAuth
 // @Router /tags [get]
 func (h *TagHandler) List(w http.ResponseWriter, r *http.Request) {
@@ -60,10 +61,11 @@ func (h *TagHandler) List(w http.ResponseWriter, r *http.Request) {
 // @Produce json
 // @Param body body createTagBody true "Tag to create"
 // @Success 201 {object} utils.CreateResponse
-// @Failure 400 {object} utils.ErrorResponse
-// @Failure 401 {object} utils.ErrorResponse
-// @Failure 422 {object} map[string]any
-// @Failure 500 {object} utils.ErrorResponse
+// @Failure 400 {object} BadRequestResponse "could not read body | could not decode body | errors: {field: message} (validation)"
+// @Failure 401 {object} UnauthorizedResponse "Missing or invalid token (text/plain)"
+// @Failure 415 {object} UnsupportedMediaTypeResponse
+// @Failure 429 {object} TooManyRequestsResponse "Rate limit exceeded (text/plain)"
+// @Failure 500 {object} InternalErrorResponse
 // @Security BearerAuth
 // @Router /tags [post]
 func (h *TagHandler) Create(w http.ResponseWriter, r *http.Request) {
@@ -90,11 +92,12 @@ func (h *TagHandler) Create(w http.ResponseWriter, r *http.Request) {
 // @Param id path string true "Tag ID"
 // @Param body body updateTagBody true "Fields to update"
 // @Success 200 {object} utils.UpdateResponse
-// @Failure 400 {object} utils.ErrorResponse
-// @Failure 401 {object} utils.ErrorResponse
-// @Failure 404 {object} utils.ErrorResponse
-// @Failure 422 {object} map[string]any
-// @Failure 500 {object} utils.ErrorResponse
+// @Failure 400 {object} BadRequestResponse "invalid id | could not read body | could not decode body | errors: {field: message} (validation)"
+// @Failure 401 {object} UnauthorizedResponse "Missing or invalid token (text/plain)"
+// @Failure 404 {object} ErrorResponse "tag not found"
+// @Failure 415 {object} UnsupportedMediaTypeResponse
+// @Failure 429 {object} TooManyRequestsResponse "Rate limit exceeded (text/plain)"
+// @Failure 500 {object} InternalErrorResponse
 // @Security BearerAuth
 // @Router /tags/{id} [patch]
 func (h *TagHandler) Update(w http.ResponseWriter, r *http.Request) {
