@@ -2,6 +2,7 @@ package handler
 
 import (
 	"kanbano-api/internal/middleware"
+	"kanbano-api/internal/permissions"
 	"kanbano-api/internal/repository"
 	"net/http"
 
@@ -25,23 +26,52 @@ func parseUUIDParam(w http.ResponseWriter, r *http.Request, param string) (uuid.
 	return id, true
 }
 
-func requireWorkspace(w http.ResponseWriter, r *http.Request, workspaceRepo *repository.WorkspaceRepository) (userID, workspaceID uuid.UUID, ok bool) {
+// requireWorkspace parses the {id} workspace param and resolves the
+// caller's roles on it, along with their guest role on the {taskId} task
+// when the route has one. Writes a 404 and returns false if the workspace
+// does not exist for the caller (permissions.CanSeeWorkspace).
+func requireWorkspace(w http.ResponseWriter, r *http.Request, roleRepo *repository.RoleRepository) (userID, workspaceID uuid.UUID, access permissions.Access, ok bool) {
 	userID = userIDFromContext(r)
 
 	workspaceID, ok = parseUUIDParam(w, r, "id")
 	if !ok {
-		return userID, workspaceID, ok
+		return userID, workspaceID, access, false
 	}
 
-	exists, err := workspaceRepo.Exists(r.Context(), workspaceID, userID)
+	taskID := uuid.Nil
+	if chi.URLParam(r, "taskId") != "" {
+		taskID, ok = parseUUIDParam(w, r, "taskId")
+		if !ok {
+			return userID, workspaceID, access, false
+		}
+	}
+
+	access, err := roleRepo.ResolveAccess(r.Context(), workspaceID, taskID, userID)
 	if err != nil {
 		serverError(w, r, err)
-		return userID, workspaceID, false
+		return userID, workspaceID, access, false
 	}
-	if !exists {
+	if !permissions.CanSeeWorkspace(access) {
 		notFound(w, r, "workspace not found")
-		return userID, workspaceID, false
+		return userID, workspaceID, access, false
 	}
 
-	return userID, workspaceID, true
+	return userID, workspaceID, access, true
 }
+
+// requirePermission writes a 403 with message and returns false when the
+// caller is not allowed.
+func requirePermission(w http.ResponseWriter, r *http.Request, allowed bool, message string) bool {
+	if !allowed {
+		forbidden(w, r, message)
+	}
+	return allowed
+}
+
+// Messages of the 403 answered by requirePermission.
+const (
+	errEditAccessRequired   = "edit access required"
+	errOwnerOrAdminRequired = "organisation owner or admin required"
+	errOwnerRequired        = "organisation owner required"
+	errGuestLimitedToTasks  = "guest access is limited to shared tasks"
+)

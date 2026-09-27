@@ -9,20 +9,20 @@ import (
 type TaskRole struct {
 	TaskID   uuid.UUID `json:"task_id"`
 	ColumnID uuid.UUID `json:"column_id"`
-	Role     string    `json:"role"`
+	Role     string    `json:"role" enums:"view,edit"`
 }
 
 type TaskAssignee struct {
 	ID            uuid.UUID `json:"id"`
-	Name          *string   `json:"name"`
+	Name          *string   `json:"name" extensions:"x-nullable"`
 	Email         string    `json:"email"`
 	AvatarVersion *string   `json:"-"`
-	Role          string    `json:"role"`
+	IsGuest       bool      `json:"is_guest"`
 }
 
 type TaskAssignedUser struct {
 	ID            uuid.UUID  `json:"id"`
 	Email         string     `json:"email"`
 	AvatarVersion *string    `json:"-"`
-	Avatar        *AvatarSet `json:"avatar"`
+	Avatar        *AvatarSet `json:"avatar" extensions:"x-nullable"`
 }

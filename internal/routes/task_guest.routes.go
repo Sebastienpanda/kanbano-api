@@ -10,5 +10,6 @@ func TaskGuestRoutes(r chi.Router, h *handler.TaskGuestHandler) {
 	r.Route("/guest-invitations", func(r chi.Router) {
 		r.Get("/received", h.ReceivedInvitations)
 		r.Patch("/{id}", h.UpdateInvitationStatus)
+		r.Post("/{id}/resend", h.Resend)
 	})
 }

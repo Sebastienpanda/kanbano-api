@@ -34,6 +34,11 @@ func conflict(w http.ResponseWriter, r *http.Request, msg string) {
 	utils.RespondError(w, http.StatusConflict, msg)
 }
 
+func gone(w http.ResponseWriter, r *http.Request, msg string) {
+	middleware.SetErrorDetail(r, msg)
+	utils.RespondError(w, http.StatusGone, msg)
+}
+
 func unprocessableEntity(w http.ResponseWriter, r *http.Request, msg string) {
 	middleware.SetErrorDetail(r, msg)
 	utils.RespondError(w, http.StatusUnprocessableEntity, msg)

@@ -7,15 +7,25 @@ import (
 )
 
 func OrganisationRoutes(r chi.Router, oh *handler.OrganisationHandler) {
-	r.Route("/organisation", func(r chi.Router) {
-		r.Get("/", oh.Get)
-		r.Get("/members/{id}/profile", oh.MemberProfile)
+	r.Route("/organisations", func(r chi.Router) {
+		r.Get("/", oh.List)
 
-		r.Route("/invitations", func(r chi.Router) {
-			r.Post("/", oh.Invite)
-			r.Get("/sent", oh.SentInvitations)
-			r.Get("/received", oh.ReceivedInvitations)
-			r.Patch("/{id}", oh.UpdateInvitationStatus)
+		r.Route("/{orgId}", func(r chi.Router) {
+			r.Get("/", oh.Get)
+			r.Patch("/", oh.Update)
+			r.Delete("/", oh.Delete)
+
+			r.Post("/invitations", oh.Invite)
+			r.Get("/invitations", oh.SentInvitations)
+
+			r.Patch("/members/{memberId}", oh.SetMemberRole)
+			r.Delete("/members/{memberId}", oh.RemoveMember)
+			r.Get("/members/{memberId}/profile", oh.MemberProfile)
 		})
+	})
+
+	r.Route("/organisation-invitations", func(r chi.Router) {
+		r.Get("/received", oh.ReceivedInvitations)
+		r.Patch("/{id}", oh.UpdateInvitationStatus)
 	})
 }

@@ -2,6 +2,7 @@ package handler
 
 import (
 	"kanbano-api/internal/models"
+	"kanbano-api/internal/permissions"
 	"kanbano-api/internal/repository"
 	"kanbano-api/internal/utils"
 	"kanbano-api/internal/ws"
@@ -11,10 +12,9 @@ import (
 )
 
 type ColumnHandler struct {
-	repo          *repository.ColumnRepository
-	workspaceRepo *repository.WorkspaceRepository
-	role          *repository.RoleRepository
-	hub           *ws.Hub
+	repo *repository.ColumnRepository
+	role *repository.RoleRepository
+	hub  *ws.Hub
 }
 
 type createColumnBody struct {
@@ -23,11 +23,11 @@ type createColumnBody struct {
 
 type updateColumnBody struct {
 	Name     *string `json:"name,omitempty" validate:"omitempty,min=1,max=100"`
-	Position *int    `json:"position,omitempty" validate:"omitempty,min=0"`
+	Position *int    `json:"position,omitempty" validate:"omitempty,min=0,max=2147483647"`
 }
 
-func NewColumnHandler(repo *repository.ColumnRepository, workspaceRepo *repository.WorkspaceRepository, role *repository.RoleRepository, hub *ws.Hub) *ColumnHandler {
-	return &ColumnHandler{repo: repo, workspaceRepo: workspaceRepo, role: role, hub: hub}
+func NewColumnHandler(repo *repository.ColumnRepository, role *repository.RoleRepository, hub *ws.Hub) *ColumnHandler {
+	return &ColumnHandler{repo: repo, role: role, hub: hub}
 }
 
 // Names godoc
@@ -36,15 +36,21 @@ func NewColumnHandler(repo *repository.ColumnRepository, workspaceRepo *reposito
 // @Produce json
 // @Param id path string true "Workspace ID"
 // @Success 200 {array} models.ColumnName
-// @Failure 400 {object} utils.ErrorResponse
-// @Failure 401 {object} utils.ErrorResponse
-// @Failure 404 {object} utils.ErrorResponse
-// @Failure 500 {object} utils.ErrorResponse
+// @Failure 400 {object} ErrorResponse "invalid id"
+// @Failure 401 {object} UnauthorizedResponse "Missing or invalid token (text/plain)"
+// @Failure 403 {object} ErrorResponse "guest access is limited to shared tasks"
+// @Failure 404 {object} ErrorResponse "workspace not found"
+// @Failure 429 {object} TooManyRequestsResponse "Rate limit exceeded (text/plain)"
+// @Failure 500 {object} InternalErrorResponse
 // @Security BearerAuth
 // @Router /workspaces/{id}/columns/names [get]
 func (h *ColumnHandler) Names(w http.ResponseWriter, r *http.Request) {
-	_, workspaceID, ok := h.parseWorkspaceContext(w, r)
+	_, workspaceID, access, ok := requireWorkspace(w, r, h.role)
 	if !ok {
+		return
+	}
+
+	if !requirePermission(w, r, permissions.CanViewWorkspace(access), errGuestLimitedToTasks) {
 		return
 	}
 
@@ -57,35 +63,17 @@ func (h *ColumnHandler) Names(w http.ResponseWriter, r *http.Request) {
 	utils.RespondJSON(w, http.StatusOK, names)
 }
 
-func (h *ColumnHandler) parseWorkspaceContext(w http.ResponseWriter, r *http.Request) (userID, workspaceID uuid.UUID, ok bool) {
-	return requireWorkspace(w, r, h.workspaceRepo)
-}
-
-func (h *ColumnHandler) parseColumnContext(w http.ResponseWriter, r *http.Request) (userID, workspaceID, columnID uuid.UUID, ok bool) {
-	userID, workspaceID, ok = h.parseWorkspaceContext(w, r)
+// parseColumnContext resolves the workspace like requireWorkspace, then
+// parses the {columnId} param. Columns have no access scope of their own:
+// the workspace roles apply.
+func (h *ColumnHandler) parseColumnContext(w http.ResponseWriter, r *http.Request) (userID, workspaceID, columnID uuid.UUID, access permissions.Access, ok bool) {
+	userID, workspaceID, access, ok = requireWorkspace(w, r, h.role)
 	if !ok {
-		return userID, workspaceID, columnID, ok
+		return userID, workspaceID, columnID, access, ok
 	}
 
 	columnID, ok = parseUUIDParam(w, r, "columnId")
-	return userID, workspaceID, columnID, ok
-}
-
-// requireWorkspaceEditAccess checks that the user holds an 'edit' role on the
-// workspace (owner, org owner, or org member with role='edit'). Columns have
-// no access scope of their own — they inherit the workspace's role. Writes a
-// 403 response and returns false otherwise.
-func (h *ColumnHandler) requireWorkspaceEditAccess(w http.ResponseWriter, r *http.Request, workspaceID, userID uuid.UUID) bool {
-	hasEditAccess, err := h.role.HasWorkspaceEditAccess(r.Context(), workspaceID, userID)
-	if err != nil {
-		serverError(w, r, err)
-		return false
-	}
-	if !hasEditAccess {
-		forbidden(w, r, "edit access required")
-		return false
-	}
-	return true
+	return userID, workspaceID, columnID, access, ok
 }
 
 func (h *ColumnHandler) broadcastColumn(userID, workspaceID uuid.UUID, eventType ws.EventType, column models.Column) {
@@ -109,20 +97,22 @@ func (h *ColumnHandler) applyColumnChange(w http.ResponseWriter, r *http.Request
 // @Param id path string true "Workspace ID"
 // @Param body body createColumnBody true "Column to create"
 // @Success 201 {object} utils.CreateResponse
-// @Failure 400 {object} utils.ErrorResponse
-// @Failure 401 {object} utils.ErrorResponse
-// @Failure 404 {object} utils.ErrorResponse
-// @Failure 422 {object} map[string]any
-// @Failure 500 {object} utils.ErrorResponse
+// @Failure 400 {object} BadRequestResponse "invalid id | could not read body | could not decode body | errors: {field: message} (validation)"
+// @Failure 401 {object} UnauthorizedResponse "Missing or invalid token (text/plain)"
+// @Failure 403 {object} ErrorResponse "organisation owner or admin required"
+// @Failure 404 {object} ErrorResponse "workspace not found"
+// @Failure 415 {object} UnsupportedMediaTypeResponse
+// @Failure 429 {object} TooManyRequestsResponse "Rate limit exceeded (text/plain)"
+// @Failure 500 {object} InternalErrorResponse
 // @Security BearerAuth
 // @Router /workspaces/{id}/columns [post]
 func (h *ColumnHandler) Create(w http.ResponseWriter, r *http.Request) {
-	userID, workspaceID, ok := h.parseWorkspaceContext(w, r)
+	userID, workspaceID, access, ok := requireWorkspace(w, r, h.role)
 	if !ok {
 		return
 	}
 
-	if !h.requireWorkspaceEditAccess(w, r, workspaceID, userID) {
+	if !requirePermission(w, r, permissions.CanCreateOrDeleteContent(access), errOwnerOrAdminRequired) {
 		return
 	}
 
@@ -149,20 +139,22 @@ func (h *ColumnHandler) Create(w http.ResponseWriter, r *http.Request) {
 // @Param columnId path string true "Column ID"
 // @Param body body updateColumnBody true "Fields to update"
 // @Success 200 {object} utils.UpdateResponse
-// @Failure 400 {object} utils.ErrorResponse
-// @Failure 401 {object} utils.ErrorResponse
-// @Failure 404 {object} utils.ErrorResponse
-// @Failure 422 {object} map[string]any
-// @Failure 500 {object} utils.ErrorResponse
+// @Failure 400 {object} BadRequestResponse "invalid id | invalid columnId | could not read body | could not decode body | errors: {field: message} (validation)"
+// @Failure 401 {object} UnauthorizedResponse "Missing or invalid token (text/plain)"
+// @Failure 403 {object} ErrorResponse "edit access required"
+// @Failure 404 {object} ErrorResponse "workspace not found | column not found"
+// @Failure 415 {object} UnsupportedMediaTypeResponse
+// @Failure 429 {object} TooManyRequestsResponse "Rate limit exceeded (text/plain)"
+// @Failure 500 {object} InternalErrorResponse
 // @Security BearerAuth
 // @Router /workspaces/{id}/columns/{columnId} [patch]
 func (h *ColumnHandler) Update(w http.ResponseWriter, r *http.Request) {
-	userID, workspaceID, columnID, ok := h.parseColumnContext(w, r)
+	userID, workspaceID, columnID, access, ok := h.parseColumnContext(w, r)
 	if !ok {
 		return
 	}
 
-	if !h.requireWorkspaceEditAccess(w, r, workspaceID, userID) {
+	if !requirePermission(w, r, permissions.CanEditContent(access), errEditAccessRequired) {
 		return
 	}
 
@@ -194,19 +186,21 @@ func (h *ColumnHandler) Update(w http.ResponseWriter, r *http.Request) {
 // @Param id path string true "Workspace ID"
 // @Param columnId path string true "Column ID"
 // @Success 204 "No Content"
-// @Failure 400 {object} utils.ErrorResponse
-// @Failure 401 {object} utils.ErrorResponse
-// @Failure 404 {object} utils.ErrorResponse
-// @Failure 500 {object} utils.ErrorResponse
+// @Failure 400 {object} ErrorResponse "invalid id | invalid columnId"
+// @Failure 401 {object} UnauthorizedResponse "Missing or invalid token (text/plain)"
+// @Failure 403 {object} ErrorResponse "organisation owner or admin required"
+// @Failure 404 {object} ErrorResponse "workspace not found | column not found"
+// @Failure 429 {object} TooManyRequestsResponse "Rate limit exceeded (text/plain)"
+// @Failure 500 {object} InternalErrorResponse
 // @Security BearerAuth
 // @Router /workspaces/{id}/columns/{columnId} [delete]
 func (h *ColumnHandler) Delete(w http.ResponseWriter, r *http.Request) {
-	userID, workspaceID, columnID, ok := h.parseColumnContext(w, r)
+	userID, workspaceID, columnID, access, ok := h.parseColumnContext(w, r)
 	if !ok {
 		return
 	}
 
-	if !h.requireWorkspaceEditAccess(w, r, workspaceID, userID) {
+	if !requirePermission(w, r, permissions.CanCreateOrDeleteContent(access), errOwnerOrAdminRequired) {
 		return
 	}
 

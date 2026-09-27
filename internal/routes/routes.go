@@ -61,21 +61,19 @@ func newHandlers(repos repositories, store *storage.Client, hub *ws.Hub) handler
 	mailer := brevo.NewClient(os.Getenv("BREVO_API_KEY"))
 
 	return handlers{
-		workspace: handler.NewWorkspaceHandler(repos.workspace, store, hub),
-		column:    handler.NewColumnHandler(repos.column, repos.workspace, repos.role, hub),
+		workspace: handler.NewWorkspaceHandler(repos.workspace, repos.role, repos.organisation, store, hub),
+		column:    handler.NewColumnHandler(repos.column, repos.role, hub),
 		task: handler.NewTaskHandler(handler.TaskHandlerDeps{
-			Repo:          repos.task,
-			WorkspaceRepo: repos.workspace,
-			ColumnRepo:    repos.column,
-			TagRepo:       repos.tag,
-			Role:          repos.role,
-			TaskAssignee:  repos.taskAssignee,
-			Store:         store,
-			Hub:           hub,
+			Repo:         repos.task,
+			ColumnRepo:   repos.column,
+			TagRepo:      repos.tag,
+			Role:         repos.role,
+			TaskAssignee: repos.taskAssignee,
+			Store:        store,
+			Hub:          hub,
 		}),
 		taskGuest: handler.NewTaskGuestHandler(handler.TaskGuestHandlerConfig{
 			Repo:            repos.taskGuest,
-			WorkspaceRepo:   repos.workspace,
 			ColumnRepo:      repos.column,
 			TaskRepo:        repos.task,
 			UserRepo:        repos.user,

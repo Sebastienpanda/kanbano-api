@@ -12,4 +12,6 @@ func task(r chi.Router, h Handlers) {
 
 	r.Post("/columns/{columnId}/tasks/{taskId}/guests", h.TaskGuest.Invite)
 	r.Get("/columns/{columnId}/tasks/{taskId}/guests", h.TaskGuest.SentInvitations)
+	r.Put("/columns/{columnId}/tasks/{taskId}/guests/{userId}", h.TaskGuest.SetRole)
+	r.Delete("/columns/{columnId}/tasks/{taskId}/guests/{userId}", h.TaskGuest.Remove)
 }
