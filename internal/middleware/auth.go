@@ -8,6 +8,7 @@ import (
 
 	"github.com/MicahParks/keyfunc/v3"
 	"github.com/golang-jwt/jwt/v5"
+	"github.com/google/uuid"
 )
 
 type contextKey string
@@ -38,6 +39,10 @@ func ValidateToken(tokenStr string) (string, error) {
 
 	userID, ok := claims["sub"].(string)
 	if !ok {
+		return "", ErrInvalidToken
+	}
+	// Handlers parse the user ID as a UUID: refuse any other subject here.
+	if _, err := uuid.Parse(userID); err != nil {
 		return "", ErrInvalidToken
 	}
 
