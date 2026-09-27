@@ -8,4 +8,6 @@ CLAUDE.md
 internal/testutil/
 internal/repository/*_test.go
 internal/handler/*_test.go
+internal/routes/*_test.go
+internal/permissions/*_test.go
 internal/db/migrations/migrations.go
