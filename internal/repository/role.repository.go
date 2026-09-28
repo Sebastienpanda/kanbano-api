@@ -3,19 +3,16 @@ package repository
 import (
 	"context"
 	"kanbano-api/internal/models"
+	"kanbano-api/internal/permissions"
 
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgxpool"
 )
 
-// RoleRepository resolves a member's effective role. Access is granted at
-// exactly two levels: an organisation-wide base role (organisation_members,
-// or 'edit' for the workspace creator / organisation owner), and a
-// task-specific override (task_assignees). When a task-scoped assignment
-// exists for a member, it always wins over the organisation role, even if
-// it is less permissive (e.g. 'view' on a task overrides an org-wide
-// 'edit').
+// RoleRepository resolves the caller's roles from the workspace_access and
+// task_guest_access views (migration 000052), which hold the access rules.
+// What those roles allow is decided by the permissions package.
 type RoleRepository struct {
 	db *pgxpool.Pool
 }
@@ -24,329 +21,172 @@ func NewRoleRepository(db *pgxpool.Pool) *RoleRepository {
 	return &RoleRepository{db: db}
 }
 
-// HasWorkspaceAccess reports whether the member has access to the
-// workspace: the workspace creator (= organisation owner), or a member
-// explicitly made 'public' on this workspace via workspace_members.
-// Organisation membership alone no longer grants access — workspaces are
-// private by default.
-func (r *RoleRepository) HasWorkspaceAccess(ctx context.Context, workspaceID, userID uuid.UUID) (bool, error) {
-	var exists bool
-	row := r.db.QueryRow(ctx, `
-		SELECT EXISTS(
-			SELECT 1 FROM workspaces w WHERE w.id = $1 AND w.created_by = $2
-		) OR EXISTS(
-			SELECT 1 FROM workspace_members wm
-			WHERE wm.workspace_id = $1 AND wm.member_id = $2 AND wm.visibility = 'public'
-		)
-		`,
-		workspaceID,
-		userID)
-	err := row.Scan(&exists)
-	return exists, err
-}
-
-// HasWorkspaceEditAccess reports whether the member has edit access to the
-// workspace. The workspace creator always has edit access. For everyone
-// else, edit access requires a workspace_members row with visibility
-// 'public' and role 'edit' (role defaults to 'view').
-func (r *RoleRepository) HasWorkspaceEditAccess(ctx context.Context, workspaceID, userID uuid.UUID) (bool, error) {
-	var exists bool
+// ResolveAccess returns the user's roles on the workspace, in one query. The
+// guest role is resolved for taskID; pass uuid.Nil when no task is involved.
+func (r *RoleRepository) ResolveAccess(ctx context.Context, workspaceID, taskID, userID uuid.UUID) (permissions.Access, error) {
+	var a permissions.Access
 	row := r.db.QueryRow(ctx, `
 		SELECT
-			EXISTS(SELECT 1 FROM workspaces w WHERE w.id = $1 AND w.created_by = $2)
-			OR EXISTS(
-				SELECT 1 FROM workspace_members wm
-				WHERE wm.workspace_id = $1 AND wm.member_id = $2
-				  AND wm.visibility = 'public' AND wm.role = 'edit'
+			COALESCE(wa.org_role, ''),
+			COALESCE(wa.workspace_role, ''),
+			COALESCE((
+				SELECT tga.role FROM task_guest_access tga
+				WHERE tga.workspace_id = $1 AND tga.task_id = $2 AND tga.user_id = $3
+			), ''),
+			EXISTS(
+				SELECT 1 FROM task_guest_access tga
+				WHERE tga.workspace_id = $1 AND tga.user_id = $3
 			)
-		`,
-		workspaceID,
-		userID)
-	err := row.Scan(&exists)
-	return exists, err
-}
-
-// HasTaskAccess reports whether the member can see the given task: either
-// through a task-specific assignment, or through organisation-level access
-// to the workspace it belongs to.
-func (r *RoleRepository) HasTaskAccess(ctx context.Context, workspaceID, taskID, userID uuid.UUID) (bool, error) {
-	var exists bool
-	row := r.db.QueryRow(ctx, `
-		SELECT EXISTS(
-			SELECT 1 FROM task_assignees ta WHERE ta.task_id = $2 AND ta.member_id = $3
-		) OR EXISTS(
-			SELECT 1 FROM workspaces w WHERE w.id = $1 AND w.created_by = $3
-		) OR EXISTS(
-			SELECT 1 FROM workspace_members wm
-			WHERE wm.workspace_id = $1 AND wm.member_id = $3 AND wm.visibility = 'public'
-		)
+		FROM (SELECT 1) AS one
+		LEFT JOIN workspace_access wa ON wa.workspace_id = $1 AND wa.user_id = $3
 		`,
 		workspaceID,
 		taskID,
 		userID)
-	err := row.Scan(&exists)
+	err := row.Scan(&a.OrgRole, &a.WorkspaceRole, &a.GuestRole, &a.IsGuest)
+	return a, err
+}
+
+// TaskInWorkspace reports whether the task exists (not deleted) in the
+// workspace.
+func (r *RoleRepository) TaskInWorkspace(ctx context.Context, taskID, workspaceID uuid.UUID) (bool, error) {
+	var exists bool
+	err := r.db.QueryRow(ctx, `
+		SELECT EXISTS(
+			SELECT 1
+			FROM tasks t
+			JOIN columns c ON c.id = t.column_id
+			WHERE t.id = $1
+			  AND c.workspace_id = $2
+			  AND t.deleted_at IS NULL
+			  AND c.deleted_at IS NULL
+		)
+		`,
+		taskID,
+		workspaceID).Scan(&exists)
 	return exists, err
 }
 
-// HasTaskEditAccess reports whether the member can edit the given task. A
-// task-specific assignment, when present, is authoritative: its role alone
-// decides, even if the member's workspace role would otherwise grant (or
-// deny) edit access. Without an assignment, the workspace-level edit role
-// applies.
-func (r *RoleRepository) HasTaskEditAccess(ctx context.Context, workspaceID, taskID, userID uuid.UUID) (bool, error) {
-	var canEdit bool
-	row := r.db.QueryRow(ctx, `
-		SELECT CASE
-			WHEN EXISTS(SELECT 1 FROM task_assignees ta WHERE ta.task_id = $2 AND ta.member_id = $3)
-				THEN EXISTS(
-					SELECT 1 FROM task_assignees ta
-					WHERE ta.task_id = $2 AND ta.member_id = $3 AND ta.role = 'edit'
-				)
-			ELSE (
-				EXISTS(SELECT 1 FROM workspaces w WHERE w.id = $1 AND w.created_by = $3)
-				OR EXISTS(
-					SELECT 1 FROM workspace_members wm
-					WHERE wm.workspace_id = $1 AND wm.member_id = $3
-					  AND wm.visibility = 'public' AND wm.role = 'edit'
-				)
-			)
-		END
-		`,
-		workspaceID,
-		taskID,
-		userID)
-	err := row.Scan(&canEdit)
-	return canEdit, err
-}
-
-// SetWorkspaceMemberAccess overrides a member's visibility and/or role on a
-// single workspace. Both are optional: a nil value keeps the current one on
-// an existing row, or falls back to the column default ('private' /
-// 'view') when the row is created here. Only callers with organisation-level
-// 'edit' (manage) should be allowed to call this — that check belongs to
-// the handler, not here.
-func (r *RoleRepository) SetWorkspaceMemberAccess(ctx context.Context, workspaceID, memberID uuid.UUID, visibility, role *string) error {
-	_, err := r.db.Exec(ctx, `
-		INSERT INTO workspace_members (workspace_id, member_id, visibility, role)
-		VALUES ($1, $2, COALESCE($3, 'private'), COALESCE($4, 'view'))
-		ON CONFLICT (workspace_id, member_id) DO UPDATE
-		SET visibility = COALESCE($3, workspace_members.visibility),
-		    role       = COALESCE($4, workspace_members.role)
-		`,
-		workspaceID,
-		memberID,
-		visibility,
-		role)
-	return err
-}
-
-// ResolveOrgRole returns the member's organisation role: 'edit' if they own
-// it, otherwise their organisation_members.role. Returns pgx.ErrNoRows if
-// the user neither owns nor belongs to an organisation.
-func (r *RoleRepository) ResolveOrgRole(ctx context.Context, userID uuid.UUID) (string, error) {
-	var role *string
-	row := r.db.QueryRow(ctx, `
-		SELECT CASE
-			WHEN EXISTS(SELECT 1 FROM organisations WHERE user_id = $1) THEN 'edit'
-			ELSE (
-				SELECT om.role FROM organisation_members om
-				WHERE om.member_id = $1
-				ORDER BY om.joined_at
-				LIMIT 1
-			)
-		END
-		`,
-		userID)
-	if err := row.Scan(&role); err != nil {
-		return "", err
-	}
-	if role == nil {
-		return "", pgx.ErrNoRows
-	}
-	return *role, nil
-}
-
-// ResolveTaskRole returns the member's effective role on a task ('edit' or
-// 'view'), applying the task_assignees-first-then-organisation-role
-// resolution, along with whether they have any access to it at all.
-func (r *RoleRepository) ResolveTaskRole(ctx context.Context, workspaceID, taskID, userID uuid.UUID) (role string, hasAccess bool, err error) {
-	row := r.db.QueryRow(ctx, `
-		SELECT
-			(
-				EXISTS(SELECT 1 FROM task_assignees ta WHERE ta.task_id = $2 AND ta.member_id = $3)
-				OR EXISTS(SELECT 1 FROM workspaces w WHERE w.id = $1 AND w.created_by = $3)
-				OR EXISTS(
-					SELECT 1 FROM workspace_members wm
-					WHERE wm.workspace_id = $1 AND wm.member_id = $3 AND wm.visibility = 'public'
-				)
-			),
-			COALESCE(
-				(SELECT ta.role FROM task_assignees ta WHERE ta.task_id = $2 AND ta.member_id = $3),
-				CASE
-					WHEN EXISTS(SELECT 1 FROM workspaces w WHERE w.id = $1 AND w.created_by = $3) THEN 'edit'
-					ELSE (
-						SELECT wm.role FROM workspace_members wm
-						WHERE wm.workspace_id = $1 AND wm.member_id = $3 AND wm.visibility = 'public'
-					)
-				END,
-				'view'
-			)
+// OrgRoles returns the role of each given user in the workspace's
+// organisation ('owner', 'admin' or 'member'). Users outside the
+// organisation are missing from the map.
+func (r *RoleRepository) OrgRoles(ctx context.Context, workspaceID uuid.UUID, userIDs []uuid.UUID) (map[uuid.UUID]string, error) {
+	rows, err := r.db.Query(ctx, `
+		SELECT u.id, CASE WHEN o.user_id = u.id THEN 'owner' ELSE om.role END
 		FROM workspaces w
+		JOIN organisations o ON o.id = w.organisation_id
+		CROSS JOIN unnest($2::uuid[]) AS u(id)
+		LEFT JOIN organisation_members om
+		       ON om.organisation_id = w.organisation_id AND om.member_id = u.id
 		WHERE w.id = $1
+		  AND (o.user_id = u.id OR om.member_id IS NOT NULL)
 		`,
 		workspaceID,
-		taskID,
-		userID)
-	err = row.Scan(&hasAccess, &role)
-	return role, hasAccess, err
+		uuidStrings(userIDs))
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	roles := make(map[uuid.UUID]string, len(userIDs))
+	for rows.Next() {
+		var (
+			id   uuid.UUID
+			role string
+		)
+		if err := rows.Scan(&id, &role); err != nil {
+			return nil, err
+		}
+		roles[id] = role
+	}
+	return roles, rows.Err()
 }
 
-// BuildWorkspaceAbilities returns the caller's effective permissions on a
-// workspace as CASL rules, ready to feed @casl/ability's
-// createMongoAbility(rules) on the Angular side. The workspace-level role
-// ('edit' → manage, 'view' → read) applies to the Workspace, Column and Task
-// subjects. Task-specific assignments (task_assignees) that diverge from
-// that baseline are then layered on top: a task downgraded to 'view' gets an
-// inverted "cannot manage" rule plus an explicit "can read" rule for that
-// task id, and a task upgraded to 'edit' gets an explicit "can manage" rule.
-//
-// A member with no organisation-level access at all falls back to the
-// task_guests source: if they have any accepted guest invitation on a task
-// in this workspace, they get read-only access to the whole workspace plus
-// an explicit "can manage" rule for each task they were granted 'edit' on.
-// This is a distinct source from task_assignees — task_guests is for people
-// with no organisation membership, so there is no base org role to override
-// in the first place.
-//
-// hasAccess is false, with rules nil, if the member has no access to the
-// workspace at all, through either source.
-func (r *RoleRepository) BuildWorkspaceAbilities(ctx context.Context, workspaceID, userID uuid.UUID) (rules []models.AbilityRule, hasAccess bool, err error) {
-	hasAccess, err = r.HasWorkspaceAccess(ctx, workspaceID, userID)
-	if err != nil {
-		return nil, false, err
-	}
-
-	if !hasAccess {
-		return r.buildGuestAbilities(ctx, workspaceID, userID)
-	}
-
-	hasEditAccess, err := r.HasWorkspaceEditAccess(ctx, workspaceID, userID)
-	if err != nil {
-		return nil, true, err
-	}
-
-	baseAction := "read"
-	if hasEditAccess {
-		baseAction = "manage"
-	}
-
-	rules = []models.AbilityRule{
-		{Action: baseAction, Subject: "Workspace", Conditions: map[string]any{"id": workspaceID}},
-		{Action: baseAction, Subject: "Column", Conditions: map[string]any{"workspace_id": workspaceID}},
-		{Action: baseAction, Subject: "Task", Conditions: map[string]any{"workspace_id": workspaceID}},
-	}
-
-	taskRoles, err := r.ListTaskRoles(ctx, workspaceID, userID)
-	if err != nil {
-		return nil, true, err
-	}
-
-	for _, tr := range taskRoles {
-		switch {
-		case hasEditAccess && tr.Role == "view":
-			rules = append(rules,
-				models.AbilityRule{Action: "manage", Subject: "Task", Conditions: map[string]any{"id": tr.TaskID}, Inverted: true},
-				models.AbilityRule{Action: "read", Subject: "Task", Conditions: map[string]any{"id": tr.TaskID}},
-			)
-		case !hasEditAccess && tr.Role == "edit":
-			rules = append(rules,
-				models.AbilityRule{Action: "manage", Subject: "Task", Conditions: map[string]any{"id": tr.TaskID}},
-			)
+// ListTaskRoles returns the tasks of the workspace the caller sees, with
+// their role on each: every task with the same role for a member ('edit'
+// if they may edit the content), only the tasks shared with them for a
+// guest, with their guest role.
+func (r *RoleRepository) ListTaskRoles(ctx context.Context, workspaceID, userID uuid.UUID, a permissions.Access) ([]models.TaskRole, error) {
+	memberRole := ""
+	if permissions.CanViewWorkspace(a) {
+		memberRole = permissions.View
+		if permissions.CanEditContent(a) {
+			memberRole = permissions.Edit
 		}
 	}
 
-	return rules, true, nil
+	rows, err := r.db.Query(ctx, `
+		SELECT t.id AS task_id, t.column_id, COALESCE(NULLIF($3, ''), tga.role) AS role
+		FROM tasks t
+		JOIN columns c ON c.id = t.column_id AND c.deleted_at IS NULL
+		LEFT JOIN task_guest_access tga ON tga.task_id = t.id AND tga.user_id = $2
+		WHERE c.workspace_id = $1
+		  AND t.deleted_at IS NULL
+		  AND ($3 <> '' OR tga.task_id IS NOT NULL)
+		ORDER BY c.position, t.position
+		`,
+		workspaceID,
+		userID,
+		memberRole)
+	if err != nil {
+		return nil, err
+	}
+	return pgx.CollectRows(rows, pgx.RowToStructByName[models.TaskRole])
 }
 
-func (r *RoleRepository) buildGuestAbilities(ctx context.Context, workspaceID, userID uuid.UUID) ([]models.AbilityRule, bool, error) {
-	guestRoles, err := r.ListGuestTaskRoles(ctx, workspaceID, userID)
-	if err != nil {
-		return nil, false, err
+// BuildWorkspaceAbilities returns the caller's permissions on the workspace
+// as CASL rules, ready to feed @casl/ability's createMongoAbility(rules) on
+// the Angular side. Actions: read, create, update, delete, plus share (manage
+// the members' access) on Workspace, and assign and invite (guests) on Task.
+// A guest only gets rules on the tasks shared with them.
+func (r *RoleRepository) BuildWorkspaceAbilities(ctx context.Context, workspaceID, userID uuid.UUID, a permissions.Access) ([]models.AbilityRule, error) {
+	workspace := map[string]any{"id": workspaceID}
+	content := map[string]any{"workspace_id": workspaceID}
+
+	if !permissions.CanViewWorkspace(a) {
+		return r.buildGuestAbilities(ctx, workspaceID, userID, a)
 	}
-	if len(guestRoles) == 0 {
-		return nil, false, nil
+
+	rules := []models.AbilityRule{
+		{Action: "read", Subject: "Workspace", Conditions: workspace},
+		{Action: "read", Subject: "Column", Conditions: content},
+		{Action: "read", Subject: "Task", Conditions: content},
+	}
+	add := func(allowed bool, subject string, conditions map[string]any, actions ...string) {
+		if !allowed {
+			return
+		}
+		for _, action := range actions {
+			rules = append(rules, models.AbilityRule{Action: action, Subject: subject, Conditions: conditions})
+		}
+	}
+	add(permissions.CanEditWorkspace(a), "Workspace", workspace, "update", "share")
+	add(permissions.CanDeleteWorkspace(a), "Workspace", workspace, "delete")
+	add(permissions.CanEditContent(a), "Column", content, "update")
+	add(permissions.CanCreateOrDeleteContent(a), "Column", content, "create", "delete")
+	add(permissions.CanEditContent(a), "Task", content, "update")
+	add(permissions.CanCreateOrDeleteContent(a), "Task", content, "create", "delete")
+	add(permissions.CanAssign(a), "Task", content, "assign")
+	add(permissions.CanInviteGuest(a), "Task", content, "invite")
+
+	return rules, nil
+}
+
+func (r *RoleRepository) buildGuestAbilities(ctx context.Context, workspaceID, userID uuid.UUID, a permissions.Access) ([]models.AbilityRule, error) {
+	taskRoles, err := r.ListTaskRoles(ctx, workspaceID, userID, a)
+	if err != nil {
+		return nil, err
 	}
 
 	rules := []models.AbilityRule{
 		{Action: "read", Subject: "Workspace", Conditions: map[string]any{"id": workspaceID}},
-		{Action: "read", Subject: "Column", Conditions: map[string]any{"workspace_id": workspaceID}},
-		{Action: "read", Subject: "Task", Conditions: map[string]any{"workspace_id": workspaceID}},
 	}
-	for _, tr := range guestRoles {
-		if tr.Role == "edit" {
-			rules = append(rules, models.AbilityRule{Action: "manage", Subject: "Task", Conditions: map[string]any{"id": tr.TaskID}})
+	for _, tr := range taskRoles {
+		task := map[string]any{"id": tr.TaskID}
+		rules = append(rules, models.AbilityRule{Action: "read", Subject: "Task", Conditions: task})
+		if tr.Role == permissions.Edit {
+			rules = append(rules, models.AbilityRule{Action: "update", Subject: "Task", Fields: []string{"description"}, Conditions: task})
 		}
 	}
-
-	return rules, true, nil
-}
-
-// ListGuestTaskRoles returns the member's accepted task_guests role for
-// every task in the workspace they have been invited to as an external
-// guest (no organisation membership).
-func (r *RoleRepository) ListGuestTaskRoles(ctx context.Context, workspaceID, userID uuid.UUID) ([]models.TaskRole, error) {
-	rows, err := r.db.Query(ctx, `
-		SELECT t.id AS task_id, t.column_id, tg.role
-		FROM task_guests tg
-		JOIN tasks t ON t.id = tg.task_id AND t.deleted_at IS NULL
-		JOIN columns c ON c.id = t.column_id AND c.deleted_at IS NULL
-		WHERE c.workspace_id = $1
-		  AND tg.user_id = $2
-		  AND tg.status = 'accepted'
-		`,
-		workspaceID,
-		userID)
-	if err != nil {
-		return nil, err
-	}
-	return pgx.CollectRows(rows, pgx.RowToStructByName[models.TaskRole])
-}
-
-// ListTaskRoles returns, for every task in the workspace the member can see,
-// their effective role. A single query joins task_assignees against the
-// member's workspace role (workspace_members) and coalesces between the
-// two, so a task-specific assignment always takes precedence. Tasks the
-// member has no access to at all (no assignment, and no public
-// workspace_members entry) are excluded — including the case where the
-// member has only been assigned to a subset of the workspace's tasks.
-func (r *RoleRepository) ListTaskRoles(ctx context.Context, workspaceID, userID uuid.UUID) ([]models.TaskRole, error) {
-	rows, err := r.db.Query(ctx, `
-		WITH org_access AS (
-			SELECT
-				w.id AS workspace_id,
-				(w.created_by = $2) AS is_owner,
-				wm.role AS wm_role,
-				wm.visibility AS wm_visibility
-			FROM workspaces w
-			LEFT JOIN workspace_members wm ON wm.workspace_id = w.id AND wm.member_id = $2
-			WHERE w.id = $1
-		)
-		SELECT
-			t.id AS task_id,
-			t.column_id,
-			COALESCE(ta.role, CASE WHEN oa.is_owner THEN 'edit' ELSE oa.wm_role END) AS role
-		FROM tasks t
-		JOIN columns c ON c.id = t.column_id AND c.deleted_at IS NULL
-		JOIN org_access oa ON oa.workspace_id = c.workspace_id
-		LEFT JOIN task_assignees ta ON ta.task_id = t.id AND ta.member_id = $2
-		WHERE t.deleted_at IS NULL
-		  AND (ta.member_id IS NOT NULL OR oa.is_owner OR oa.wm_visibility = 'public')
-		ORDER BY c.position, t.position
-		`,
-		workspaceID,
-		userID)
-	if err != nil {
-		return nil, err
-	}
-	return pgx.CollectRows(rows, pgx.RowToStructByName[models.TaskRole])
+	return rules, nil
 }

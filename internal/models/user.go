@@ -9,7 +9,7 @@ import (
 type User struct {
 	ID              uuid.UUID  `json:"id"`
 	Email           string     `json:"email"`
-	Name            *string    `json:"name"`
+	Name            *string    `json:"name" extensions:"x-nullable"`
 	CreatedAt       time.Time  `json:"created_at"`
 	AvatarVersion   *string    `json:"-"`
 	AvatarUpdatedAt *time.Time `json:"avatar_updated_at,omitempty"`

@@ -16,7 +16,7 @@ import (
 
 // @title Kanbano API
 // @version 1.0
-// @description REST API for the Kanbano kanban application (workspaces, columns, tasks, tags, organisations, users).
+// @description.markdown
 // @host localhost:3000
 // @BasePath /api/v1
 // @securityDefinitions.apikey BearerAuth

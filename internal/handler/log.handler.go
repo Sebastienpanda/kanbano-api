@@ -18,14 +18,15 @@ func NewLogHandler(repo *repository.LogRepository) *LogHandler {
 // @Summary List request/error logs (admin only)
 // @Tags log
 // @Produce json
-// @Param level query string false "info, warning or error"
+// @Param level query string false "Log level" Enums(info, warning, error)
 // @Param limit query int false "Page size (default 50, max 200)"
 // @Param offset query int false "Page offset (default 0)"
 // @Success 200 {array} models.Log
-// @Failure 400 {object} utils.ErrorResponse
-// @Failure 401 {object} utils.ErrorResponse
-// @Failure 403 {object} utils.ErrorResponse
-// @Failure 500 {object} utils.ErrorResponse
+// @Failure 400 {object} ErrorResponse "invalid level | invalid limit | invalid offset"
+// @Failure 401 {object} UnauthorizedResponse "Missing or invalid token (text/plain)"
+// @Failure 403 {object} AdminForbiddenResponse "Caller is not an administrator (text/plain)"
+// @Failure 429 {object} TooManyRequestsResponse "Rate limit exceeded (text/plain)"
+// @Failure 500 {object} InternalErrorResponse
 // @Security BearerAuth
 // @Router /admin/logs [get]
 func (h *LogHandler) List(w http.ResponseWriter, r *http.Request) {

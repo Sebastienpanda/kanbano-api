@@ -18,9 +18,9 @@ type Column struct {
 	Position    int        `json:"position"`
 	WorkspaceID uuid.UUID  `json:"workspace_id"`
 	CreatedBy   uuid.UUID  `json:"created_by"`
-	UpdatedBy   *uuid.UUID `json:"updated_by"`
-	DeletedBy   *uuid.UUID `json:"deleted_by"`
+	UpdatedBy   *uuid.UUID `json:"updated_by" extensions:"x-nullable"`
+	DeletedBy   *uuid.UUID `json:"deleted_by" extensions:"x-nullable"`
 	CreatedAt   time.Time  `json:"created_at"`
-	UpdatedAt   *time.Time `json:"updated_at"`
-	DeletedAt   *time.Time `json:"deleted_at"`
+	UpdatedAt   *time.Time `json:"updated_at" extensions:"x-nullable"`
+	DeletedAt   *time.Time `json:"deleted_at" extensions:"x-nullable"`
 }

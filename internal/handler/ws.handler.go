@@ -30,7 +30,8 @@ func bearerToken(r *http.Request) string {
 // @Description Upgrades to a WebSocket connection. The JWT is passed via the Sec-WebSocket-Protocol header as "bearer, <token>" (not a normal Authorization header, so no BearerAuth security scheme applies here).
 // @Tags ws
 // @Success 101 "Switching Protocols"
-// @Failure 401 {object} string "missing or invalid token"
+// @Failure 401 {object} UnauthorizedResponse "Missing or invalid token (text/plain)"
+// @Failure 429 {object} TooManyRequestsResponse "Rate limit exceeded (text/plain)"
 // @Router /ws [get]
 func (h *WSHandler) Serve(w http.ResponseWriter, r *http.Request) {
 	token := bearerToken(r)
